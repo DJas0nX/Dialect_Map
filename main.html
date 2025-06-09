@@ -170,11 +170,14 @@
                         使用说明
                         <div class="info-tooltip">
                             <div class="tooltip-text-content">
-                                <strong>五度标记法</strong>（five level tone mark），即五度制调值标记法，是赵元任1920年代发明的一种记录语言调值的方法。其把相对音高高度用数字表示，各种汉语语言的记录，以1代表最低，以2代表次低，以3代表中，以4代表次高，以5代表最高。
-                                <br><br>
-                                现代方言的调类均可分析为分化自中古汉语的四声，不过不同方言间的同源调类的调值往往差异很大。例如，官话中，阳上和阳去合流，后来阴去也与它们合流，这样一来就只剩下6个声调。后来入声的韵尾消失，入声便合流到其他调类中，只剩下4个声调。
+                                <strong>使用说明</strong><br>该部分为系统主视图，左侧为按方言地理分布划分的区域图，右侧为同方言在不同地区语音相似度的网络图。
                                 <br>
-                                <img src="tone.png" alt="五度标记法示意图" class="tone-image" onerror="this.style.display='none'">
+                                用户可以在左上角选择<strong>“人口视图”</strong>或<strong>“方言区域视图”</strong>来切换不同的视图模式。
+                                <br>
+                                用户点击左侧任意方言区域后，右侧会显示该方言在不同地区的语音相似度网络图。用户可以通过滑动条调整相似度阈值，以筛选出相似度高于指定值的节点和连线。
+                                <br>
+                                在点击左侧任意方言区域后，第二章的雷达图与星座图也会对应突出呈现该方言项，在<strong>点击任意空白处</strong>后恢复默认显示状态。
+                                <br>
                             </div>
                         </div>
                     </div>
@@ -260,7 +263,7 @@
                 '客家话': ['粤台片', '海陆片', '粤北片', '粤西片', '汀州片', '宁龙片','于信片','铜桂片'],
                 '粤语': ['广府片', '四邑片', '高阳片', '吴化片', '勾漏片', '邕浔片','钦廉片'],
                 '湘语': ['长益片', '娄邵片', '衡州片', '辰激片', '永全片'],
-                '赣语': ['绩歙片', '休黟片', '祁婺片', '严州片', '旌占片'],
+                '赣语': ['昌都片', '宜浏片', '吉茶片', '抚广片'],
                 '晋语': ['并州片', '五台片', '大包片', '张呼片', '志延片', '吕梁片', '上党片', '邯新片']
             };
             const areaData = {
@@ -326,6 +329,9 @@
                     }
                     networkChart = echarts.init(document.getElementById('network-main'));
 
+                    // 获取当前方言对应的颜色
+                    const dialectBorderColor = dialectColors[dialectName] || '#86ADAD';
+
                     data.nodes.forEach(node => { node.symbolSize = 50; });
                     networkChart.setOption({
                         series: [{
@@ -336,7 +342,7 @@
                                     ...node,
                                     itemStyle: {
                                         color: '#F3F3F3', 
-                                        borderColor: '#86ADAD', 
+                                        borderColor: dialectBorderColor,  // 修改：使用方言对应的颜色
                                         borderWidth: 2.5, 
                                     },
                                 };
@@ -363,9 +369,9 @@
                             }),
                             label: { show: true, position: 'inside' },
                             force: {
-                            repulsion: 200,
-                            edgeLength: 200,
-                            gravity: 0.1,
+                                repulsion: 200,
+                                edgeLength: 200,
+                                gravity: 0.1,
                             }
                         }]
                     });
@@ -373,16 +379,16 @@
                     document.getElementById('myRange').oninput = function() {
                         const val = this.value;
                         document.getElementById('sliderValue').innerText = '相似度：' + val;
-                        const filteredLinks = data.links.filter(link => link.similarity >= val); // Corrected: was val + 50
+                        const filteredLinks = data.links.filter(link => link.similarity >= val);
                         data.nodes.forEach(node => { node.symbolSize = 50; });
                         networkChart.setOption({
                             series: [{
-                                data: data.nodes.map(function (node) { // Ensure nodes are always included
+                                data: data.nodes.map(function (node) {
                                     return {
                                         ...node,
                                         itemStyle: {
                                             color: '#F3F3F3',
-                                            borderColor: '#86ADAD',
+                                            borderColor: dialectBorderColor,  // 修改：这里也要使用方言对应的颜色
                                             borderWidth: 2.5,
                                         },
                                     };
@@ -394,6 +400,7 @@
                                         label: {
                                             show: false,
                                             formatter: '相似度：' + link.similarity,
+                                            fontSize: 18
                                         },
                                         lineStyle: {
                                             opacity: 0.5,
@@ -402,7 +409,8 @@
                                         },
                                         emphasis: {
                                             label: {
-                                                show: true
+                                                show: true,
+                                                fontSize: 18
                                             }
                                         }
                                     };
@@ -412,7 +420,6 @@
                     };
                     // Trigger initial filter based on current slider value
                     document.getElementById('myRange').dispatchEvent(new Event('input'));
-
                 };
                 document.head.appendChild(script);
                 // Clean up script tag after loading
@@ -805,19 +812,8 @@
                                 needsLabelOverride = true;
                             }
                             
-                            // 如果没有自定义颜色，它将使用 baseGeoConfig.label 中的默认颜色和阴影
-                            // 如果有自定义颜色但不是白色（例如，如果将来添加其他自定义颜色），
-                            // 并且需要不同的阴影逻辑，可以在此处扩展。
-                            // 目前，非白色自定义颜色将退回到 baseGeoConfig 的阴影（如果未在此处明确设置）。
-                            // 为了确保所有自定义颜色都有明确的阴影，可以添加一个else:
                             else if (needsLabelOverride) { // 如果有offset但没有自定义颜色
-                                // 此时会继承 baseGeoConfig.label 的颜色和阴影
-                                // 如果需要为这些情况单独设置阴影，可以在这里设置
-                                // labelConfigForRegion.textShadowColor = 'rgba(255, 255, 255, 0.7)'; // (与默认一致)
-                                // labelConfigForRegion.textShadowBlur = 2;
-                                // ...
                             }
-
 
                             if (needsLabelOverride) {
                                 regionSpecificConfig.label = labelConfigForRegion;
