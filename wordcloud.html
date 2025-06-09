@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <title>词云</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.2/echarts.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts-wordcloud/2.1.0/echarts-wordcloud.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        html,
+        body {
+            margin: 0;
+            background: transparent;
+        }
+
+        body {
+            width: 100%;
+            min-width: fit-content;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            background: transparent;
+        }
+
+        /* 移除了旧的 #main 和 #chart-container 样式 */
+
+        /* 新增：定义“行”的样式，用于水平居中排列图表 */
+        .chart-row {
+            display: flex;
+            justify-content: center; /* 确保行内的图表水平居中 */
+            align-items: center;
+        }
+
+        /* 修改：单个图表样式，调整尺寸以适应新布局 */
+        .chart-item {
+            width: 650px;  
+            height: 650px; /* 减小图表高度 */
+        }
+
+
+        .container {
+            position: relative;
+            height: auto;
+            margin-top: 10px;
+        }
+
+        #video-player {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        #video-player video {
+            max-width: 80vw;
+            max-height: 80vh;
+            background: #fff;
+            border-radius: 8px;
+            outline: none;
+        }
+
+        #video-player .close-btn {
+            position: absolute;
+            right: 6vw;
+            top: 6vh;
+            font-size: 36px;
+            color: #fff;
+            background: rgba(0, 0, 0, 0.3);
+            border: none;
+            cursor: pointer;
+            z-index: 1001;
+            border-radius: 50%;
+            width: 48px;
+            height: 48px;
+        }
+
+        #tip {
+            position: absolute;
+            top: 10px;
+            color: #888;
+            font-size: 15px;
+            z-index: 20;
+            user-select: none;
+        }
+
+        #loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #666;
+            font-size: 18px;
+            z-index: 30;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 20px;
+            border-radius: 8px;
+        }
+
+        .error-message {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #e74c3c;
+            font-size: 16px;
+            text-align: center;
+            z-index: 30;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+
+<body>
+    <h2 style="text-align: center; font-size: 36px; color: #333; margin-top: 20px;">
+        异口同“义” - 汉语方言词云
+    </h2>
+    <div id="tip" style="position: sticky; top: 10px; width: 400px; text-align: center; padding: 5px 0;">
+        <span style="color:#666;font-weight:bold;font-size: 25px;">带🔊标记的词可双击播放音频</span>
+    </div>
+    <div class="container">
+        <!-- 修改：将5个图表容器分为两行 -->
+        <div class="chart-row">
+            <div id="chart-0" class="chart-item"></div>
+            <div id="chart-1" class="chart-item"></div>
+            <div id="chart-2" class="chart-item"></div>
+        </div>
+        <div class="chart-row">
+            <div id="chart-3" class="chart-item"></div>
+            <div id="chart-4" class="chart-item"></div>
+        </div>
+        <div id="loading">正在加载数据...</div>
+    </div>
+    <script>
+        const wordCols = ["吃饭", "睡觉", "好", "看、瞧", "疑问"];
+        const maskImageSrcs = [
+            "images/eat.png", "images/sleep.png", "images/good.png", "images/see.png", "images/doubt.png"
+        ];
+        const maskImages = [null, null, null, null, null];
+        const wordCloudData = {};
+        let wordList = [];
+        const excelFileName = "ciyun.xlsx";
+
+        const palettes = [
+            ['#ffb6c1', '#ff69b4', '#ff1493', '#ffd1df', '#e75480', '#f68fa7'],
+            ['#ffd700', '#ffc107', '#ffb300', '#ffa000', '#ff8f00', '#b28704'],
+            ['#ffcdd2', '#e57373', '#ef5350', '#d32f2f', '#b71c1c', '#ff7474'],
+            ['#90caf9', '#42a5f5', '#1e88e5', '#64b5f6', '#1976d2', '#2874a6'],
+            ['#757575', '#616161', '#444444', '#888888', '#222222', '#999999']
+        ];
+
+        let audioFileMap = {};
+
+        function hideLoading() {
+            const loading = document.getElementById('loading');
+            if (loading) loading.style.display = 'none';
+        }
+
+        function showError(message) {
+            hideLoading();
+            const container = document.querySelector('.container');
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-message';
+            errorDiv.innerHTML = `
+                <h3>加载失败</h3>
+                <p>${message}</p>
+                <p style="margin-top: 15px; font-size: 14px; color: #666;">
+                    请确保：<br>
+                    1. ciyun.xlsx 文件在同级目录下<br>
+                    2. 使用本地服务器访问（如 Live Server）<br>
+                    3. 检查浏览器控制台获取详细错误信息
+                </p>
+            `;
+            container.appendChild(errorDiv);
+        }
+
+        function waitForXLSX() {
+            return new Promise((resolve, reject) => {
+                let attempts = 0;
+                const maxAttempts = 50; // 5秒超时
+                
+                function check() {
+                    if (typeof XLSX !== 'undefined') {
+                        resolve();
+                    } else if (attempts < maxAttempts) {
+                        attempts++;
+                        setTimeout(check, 100);
+                    } else {
+                        reject(new Error('XLSX 库加载超时'));
+                    }
+                }
+                check();
+            });
+        }
+
+        function loadExcelData() {
+            waitForXLSX()
+                .then(() => {
+                    return fetch(excelFileName);
+                })
+                .then(res => {
+                    if (!res.ok) {
+                        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                    }
+                    return res.arrayBuffer();
+                })
+                .then(data => {
+                    const wb = XLSX.read(data, { type: 'array' });
+                    if (!wb.SheetNames || wb.SheetNames.length === 0) {
+                        throw new Error('Excel 文件中没有找到工作表');
+                    }
+                    
+                    const ws = wb.Sheets[wb.SheetNames[0]];
+                    const jsonData = XLSX.utils.sheet_to_json(ws);
+                    
+                    if (!jsonData || jsonData.length === 0) {
+                        throw new Error('Excel 文件中没有找到数据');
+                    }
+
+                    wordCols.forEach(col => wordCloudData[col] = []);
+                    
+                    jsonData.forEach(item => {
+                        const region = item["方言分区"] || "";
+                        const cnt = Number(item["使用人数（万人）"]) || 1;
+                        wordCols.forEach(col => {
+                            if (item[col]) {
+                                item[col].toString().split(/、|,|，/).forEach(name => {
+                                    name = name.trim();
+                                    if (name) {
+                                        wordCloudData[col].push({ name, value: cnt, region });
+                                    }
+                                });
+                            }
+                        });
+                    });
+                    
+                    wordList = wordCols;
+                    
+                    return markWordsWithAudio();
+                })
+                .then(() => {
+                    return loadAllMaskImages();
+                })
+                .then(() => {
+                    hideLoading();
+                    
+                    for (let i = 0; i < wordList.length; i++) {
+                        const chartDom = document.getElementById('chart-' + i);
+                        if(chartDom) {
+                            const chartInstance = echarts.init(chartDom);
+                            
+                            generateWordCloud(
+                                chartInstance,
+                                wordCloudData[wordList[i]], 
+                                wordList[i], 
+                                maskImages[i],
+                                i
+                            );
+
+                            chartInstance.on('dblclick', function (params) {
+                                if (params.data && params.data.region && params.data.region !== "填充") {
+                                    const col = wordList[i];
+                                    const region = params.data.region;
+                                    const name = params.data.name;
+                                    const found = getBestAudioPath(col, region, name);
+                                    if (found) {
+                                        playAudio(found.src, `${region} - ${name}`);
+                                    }
+                                }
+                            });
+                        }
+                    }
+                })
+                .catch(err => {
+                    console.error('详细错误信息:', err);
+                    showError(`${err.message}`);
+                });
+        }
+
+        async function markWordsWithAudio() {
+            audioFileMap = {};
+            let checkPromises = [];
+            wordCols.forEach((col) => {
+                let alreadyChecked = new Set();
+                wordCloudData[col].forEach(item => {
+                    if (!item.region || item.region === "填充") return;
+                    const key = item.region + '-' + item.name;
+                    if (alreadyChecked.has(key)) return;
+                    alreadyChecked.add(key);
+                    const mp3Name = encodeURIComponent(item.region + '-' + item.name + '.mp3');
+                    const mp3Path = `语音/${col}/${mp3Name}`;
+                    const p = fetch(mp3Path, { method: "HEAD" })
+                        .then(res => {
+                            if (res.ok) {
+                                audioFileMap[item.region + '-' + item.name] = mp3Path;
+                                wordCloudData[col].forEach(i2 => {
+                                    if (i2.name === item.name && i2.region === item.region)
+                                        i2.hasAudio = true;
+                                });
+                            }
+                        }).catch(() => { });
+                    checkPromises.push(p);
+                });
+            });
+            await Promise.all(checkPromises);
+        }
+
+
+        function loadAllMaskImages() {
+            return new Promise((resolve, reject) => {
+                let loaded = 0;
+                let hasError = false;
+                
+                for (let i = 0; i < maskImageSrcs.length; i++) {
+                    const img = new Image();
+                    img.crossOrigin = "anonymous";
+                    img.src = maskImageSrcs[i];
+                    img.onload = () => {
+                        maskImages[i] = img;
+                        loaded++;
+                        if (loaded === maskImageSrcs.length && !hasError) {
+                            resolve();
+                        }
+                    };
+                    img.onerror = () => {
+                        console.warn(`遮罩图加载失败: ${maskImageSrcs[i]}`);
+                        maskImages[i] = null;
+                        loaded++;
+                        if (loaded === maskImageSrcs.length && !hasError) {
+                            resolve();
+                        }
+                    };
+                }
+            });
+        }
+
+        function generateWordCloud(chartInstance, data, word, maskImage, chartIndex) {
+            const palette = palettes[chartIndex % palettes.length];
+            const mainWords = data.map(item => item.name);
+            const mainSet = new Set(mainWords);
+            const targetCount = Math.max(200, data.length * 2);
+
+            const wordColorMap = {};
+            let colorIdx = 0;
+            mainSet.forEach(name => {
+                wordColorMap[name] = palette[colorIdx % palette.length];
+                colorIdx++;
+            });
+
+            let displayData = data.map(item => ({ ...item }));
+
+            let fillIdx = 0;
+            while (displayData.length < targetCount) {
+                const fillName = mainWords[fillIdx % mainWords.length];
+                const mainItem = data.find(it => it.name === fillName && it.region !== "填充");
+                displayData.push({
+                    name: fillName,
+                    value: 1,
+                    region: "填充",
+                    hasVideo: mainItem ? mainItem.hasVideo : false,
+                    tooltip: { show: false }
+                });
+                fillIdx++;
+            }
+
+            chartInstance.setOption({
+            title: {
+                    text: `"${word}"`,
+                    left: 'center',
+                    textStyle: {
+                        fontSize: 28,
+                        fontWeight: 'bold',
+                        color: '#333'
+                    }
+                },
+                tooltip: {
+                    show: true,
+                    formatter: function (params) {
+                        if (params.data && params.data.region && params.data.region !== "填充") {
+                            let t = `<b>${params.name}`;
+                            if (hasAnyAudio(params.data, chartIndex)) t += ' <span style="color:#f00">🔊</span>';
+                            t += `</b><br/>方言分区: ${params.data.region}<br/>使用人数: ${params.data.value} 万人`;
+                            if (hasAnyAudio(params.data, chartIndex)) t += `<br/><span style="color:#c2185b;font-weight:bold;">双击播放音频</span>`;
+                            return t;
+                        }
+                        return "";
+                    },
+                    textStyle: {
+                        fontSize: 22
+                    }
+                },
+                series: [{
+                    type: 'wordCloud',
+                    left: 'center',
+                    top: 'center',
+                    width: '100%',
+                    height: '100%',
+                    sizeRange: [12, 50],
+                    gridSize: 4,
+                    drawOutOfBound: false,
+                    layoutAnimation: true,
+                    maskImage: maskImage,
+                    backgroundColor: 'black',
+                    keepAspect: true,
+                    textStyle: {
+                        color: (params) => {
+                            return wordColorMap[params.data.name] || palette[Math.floor(Math.random() * palette.length)];
+                        }
+                    },
+                    emphasis: {
+                        focus: function (params) {
+                            if (params.data && params.data.region !== "填充") {
+                                return 'self';
+                            }
+                            return 'none';
+                        },
+                        textStyle: function (params) {
+                            if (params.data && params.data.region !== "填充") {
+                                return {
+                                    textShadowBlur: 10,
+                                    textShadowColor: '#333'
+                                };
+                            }
+                            return null;
+                        }
+                    },
+                    data: displayData.map(item => {
+                        if (item.region === "填充") {
+                            return { ...item, emphasis: { focus: 'none', textStyle: null }, tooltip: { show: false } };
+                        }
+                        return item;
+                    })
+                }]
+            });
+        }
+
+        function hasAnyAudio(data, chartIndex) {
+            if (!data.region || data.region === "填充") return false;
+            if (audioFileMap[data.region + '-' + data.name]) return true;
+            
+            const col = wordList[chartIndex];
+            const mainWord = getMainWord(col, data.region, data.name);
+            if (mainWord && mainWord !== data.name && audioFileMap[region + '-' + mainWord]) {
+                return true;
+            }
+            return false;
+        }
+
+        function getBestAudioPath(col, region, name) {
+            const thisKey = region + '-' + name;
+            if (audioFileMap[thisKey]) return { src: audioFileMap[thisKey], from: name };
+            const mainWord = getMainWord(col, region, name);
+            if (mainWord && mainWord !== name && audioFileMap[region + '-' + mainWord]) {
+                return { src: audioFileMap[region + '-' + mainWord], from: mainWord };
+            }
+            return null;
+        }
+
+        function getMainWord(col, region, name) {
+            let bestMain = null, maxLen = 0;
+            wordCloudData[col].forEach(item => {
+                if (item.region === region && name.includes(item.name) && item.name !== name && audioFileMap[region + '-' + item.name]) {
+                    if (item.name.length > maxLen) {
+                        bestMain = item.name;
+                        maxLen = item.name.length;
+                    }
+                }
+            });
+            return bestMain || null;
+        }
+
+        function playAudio(src, title = '') {
+            const existingAudio = document.querySelector('audio');
+            if (existingAudio) {
+                existingAudio.pause();
+                existingAudio.remove();
+            }
+            
+            const audio = document.createElement('audio');
+            audio.src = src;
+            audio.controls = true;
+            audio.autoplay = true;
+            audio.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                z-index: 1000;
+                background: rgba(255,255,255,0.9);
+                border-radius: 25px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            `;
+            
+            const existingTip = document.querySelector('.audio-play-tip');
+            if (existingTip) {
+                existingTip.remove();
+            }
+            const audioTip = document.createElement('div');
+            audioTip.className = 'audio-play-tip';
+            audioTip.style.cssText = `
+                position: fixed;
+                top: 50px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: rgba(0,0,0,0.8);
+                color: white;
+                padding: 10px 20px;
+                border-radius: 5px;
+                z-index: 1000;
+                font-size: 16px;
+                pointer-events: auto;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            `;
+            audioTip.innerHTML = `正在播放: ${title} <button onclick="this.parentNode.remove()" style="margin-left:10px;color:white;background:none;border:1px solid white;border-radius:3px;cursor:pointer;">×</button>`;
+            
+            document.body.appendChild(audio);
+            document.body.appendChild(audioTip);
+            
+            audio.addEventListener('ended', () => {
+                audioTip.remove();
+                audio.remove();
+            });
+        }
+        
+        loadExcelData();
+    </script>
+</body>
+
+</html>

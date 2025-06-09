@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>方言地图</title>
+    <style>
+        html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }
+        /*TJL*/
+        #main {
+            width: 100%;    /* CHANGED to full width */
+            height: 100%;
+            position: relative; /* Added to establish a stacking context */
+            z-index: 1;
+        }
+        #network-container {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 35%;
+            height: 100%;
+            /* 移除 opacity 和 pointer-events，使其默认可见 */
+            transition: opacity 0.5s ease;
+            background-color: transparent;
+            z-index: 2;
+        }
+        #network-container #network-main {
+            width: 100%;
+            height: 80%;
+        }
+        #network-container .slider-container {
+            text-align: center;
+            margin-top: 10px;
+        }
+        /*TJL*/
+        .bubble-text { font-size: 12px; fill: #333; }
+
+        .view-controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            background: transparent;
+            padding: 8px;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .view-controls button {
+            margin-right: 5px;
+            padding: 5px 10px;
+            cursor: pointer;
+            background-color: rgb(211,203,182);
+            border-radius: 3px;
+            font-size: 20px;
+        }
+
+        #time-slider-container {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            max-width: 600px;
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px 15px;
+            border-radius: 8px;
+            box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            font-family: sans-serif;
+        }
+        #time-slider-container label {
+            margin-right: 10px;
+            white-space: nowrap;
+        }
+        #time-slider-container input[type="range"] {
+            flex-grow: 1;
+            cursor: pointer;
+        }
+        .info-panels {
+            position: fixed;
+            bottom: 20px;
+            right: 15px;
+            display: flex;
+            flex-direction: row;
+            gap: 10px;
+            z-index: 1000;
+        }
+
+        .info-panel {
+            position: relative;
+            background: white;
+            color: rgba(0, 0, 0, 0.9);
+            padding: 8px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            transition: all 0.3s ease;
+        }
+
+        .info-panel:hover {
+            background: rgba(0, 0, 0, 0.2);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .info-tooltip {
+            position: absolute;
+            bottom: 100%;
+            right: 0;
+            margin-bottom: 10px;
+            background: white;
+            color: rgba(0, 0, 0, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            font-size: 18px;
+            line-height: 1.5;
+            max-width: 520px;
+            width: max-content;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(10px);
+            transition: all 0.3s ease;
+            z-index: 1001;
+        }
+
+        .info-panel:hover .info-tooltip {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .info-tooltip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            right: 20px;
+            border: 8px solid transparent;
+            border-top-color: white;
+        }
+
+        .tone-image {
+            width: 500px;
+            height: auto;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+
+        .tooltip-text-content {
+            font-weight: normal;
+        }
+    </style>
+</head>
+<body>
+    <div class="view-controls">
+        <button id="viewPopulation">人口视图</button>
+        <button id="viewDialectArea">方言区域视图</button>
+    </div>
+
+    <div id="time-slider-container">
+        <label for="timeSlider">时间: <span id="currentTimeLabel"></span></label>
+        <input type="range" id="timeSlider" min="0" max="0" value="0" step="1"style="accent-color: rgb(124,101,73);" >
+    </div>
+                <div class="info-panels">
+                    <div class="info-panel">
+                        使用说明
+                        <div class="info-tooltip">
+                            <div class="tooltip-text-content">
+                                <strong>五度标记法</strong>（five level tone mark），即五度制调值标记法，是赵元任1920年代发明的一种记录语言调值的方法。其把相对音高高度用数字表示，各种汉语语言的记录，以1代表最低，以2代表次低，以3代表中，以4代表次高，以5代表最高。
+                                <br><br>
+                                现代方言的调类均可分析为分化自中古汉语的四声，不过不同方言间的同源调类的调值往往差异很大。例如，官话中，阳上和阳去合流，后来阴去也与它们合流，这样一来就只剩下6个声调。后来入声的韵尾消失，入声便合流到其他调类中，只剩下4个声调。
+                                <br>
+                                <img src="tone.png" alt="五度标记法示意图" class="tone-image" onerror="this.style.display='none'">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+    <!-- TJL添加功能 -->
+    <div id="main"></div>
+
+    <!-- 右侧网络图容器（初始隐藏） -->
+    <div id="network-container" style="margin-top: 40px;">
+        <!-- 新增：初始提示信息 -->
+        <div id="network-placeholder" style="margin-top: 50px; display: flex; justify-content: center; align-items: center; height: 80%; color:rgb(126,100,73); font-size: 1.2em; text-align: center; padding: 20px;font-weight: bold;">
+            在左侧选择一个方言<br>以查看相似度网络图
+        </div>
+
+        <!-- 网络图主容器 (初始隐藏) -->
+        <div id="network-main" style="display: none;"></div>
+        <!-- 滑动条容器 (初始隐藏) -->
+        <div class="slider-container" style="margin-top: 30px; display: none;">
+            <p id="sliderValue">相似度：75</p>
+            <input type="range" id="myRange" min="50" max="99" value="75" style="width: 350px; accent-color: rgb(124,101,73);"/>
+        </div>
+    </div>
+    <!-- TJL添加功能 -->
+
+    <div id="main"></div>
+    <script src="./echarts.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            var chartDom = document.getElementById('main');
+            if (!chartDom) {
+                console.error("Fatal Error: DOM element with id 'main' not found.");
+                document.body.innerHTML = '<div style="color: red; padding: 20px;">错误: 找不到 ID 为 "main" 的图表容器。</div>';
+                return;
+            }
+            var myChart = echarts.init(chartDom);
+            var option;
+
+            let currentView = 'population';
+            let baseMapData = null;
+            let populationDataByTime = null;
+            let availableTimeNodes = [];
+            let currentSelectedTimeNode = null;
+            let dialectColors = {}; // This will be populated by the new fixed colors
+            let dialectLegendData = [];
+            let descriptionData = {}; 
+            let globalMinPopulation = 0;
+            let globalMaxPopulation = 1000;
+            let visualMapMinPopulation_NonMandarin = 0;
+            let visualMapMaxPopulation_NonMandarin = 1000;
+            const mandarinDialectName = '官话';
+
+            // --- NEW: Define the target dialect styles as provided ---
+            const targetDialectStyles = {
+                '闽语': '#A899E5',
+                '粤语': '#B6D2FB',
+                '吴语': '#E2B3EE',
+                '客家话': '#AAC4C4',
+                '湘语': '#F0A8A8',
+                '赣语': '#E085BC',
+                '官话': '#F7C967',
+                "晋语": "#FBF0B6"
+
+                // Any other dialects in your GeoJSON not listed here will get a default color
+            };
+            // --- END NEW ---
+
+
+            const timeSliderContainer = document.getElementById('time-slider-container');
+            const timeSlider = document.getElementById('timeSlider');
+            const currentTimeLabel = document.getElementById('currentTimeLabel');
+
+            const customLabelOffsets = {
+                '官话': [50, 120], '吴语': [10, 0], '粤语': [0, -10],
+                '闽语': [5, 0], '赣语': [10, 5],"湘语":[10, 0],
+            };
+            const customLabelFontColors = {
+                '官话': 'white', '吴语': 'white', '粤语': 'white', '闽语': 'white',
+            };
+            const districtData = {
+                '官话': ['江淮官话', '北京官话', '东北官话', '冀鲁官话', '胶辽官话', '中原官话', '西南官话', '兰银官话'],
+                '吴语': ['台州片', '金衢片', '瓯江片', '太湖片', '上丽片', '宣州片'],
+                '闽语': ['莆仙片', '闽中片', '雷州片', '闽南片', '闽东片', '闽北片','琼文片','邵将片'],
+                '客家话': ['粤台片', '海陆片', '粤北片', '粤西片', '汀州片', '宁龙片','于信片','铜桂片'],
+                '粤语': ['广府片', '四邑片', '高阳片', '吴化片', '勾漏片', '邕浔片','钦廉片'],
+                '湘语': ['长益片', '娄邵片', '衡州片', '辰激片', '永全片'],
+                '赣语': ['绩歙片', '休黟片', '祁婺片', '严州片', '旌占片'],
+                '晋语': ['并州片', '五台片', '大包片', '张呼片', '志延片', '吕梁片', '上党片', '邯新片']
+            };
+            const areaData = {
+                '太湖片': ['毗陵小片', '苏嘉湖\n小片', '上海小片','杭州小片','临绍小片','甬江小片'],
+                '上丽片': ['上山小片', '丽水小片'], '宣州片': ['铜泾小片', '太高小片', '石陵小片'],
+                '闽南片': ['泉漳小片', '大田小片','潮汕小片','浙东小片','赣东北\n小片'],
+                '闽东片': ['候官小片', '福宁小片'], '闽北片': ['建瓯小片', '建阳小片'],
+                '琼文片': ['府城小片', '文昌小片','万宁小片','崖县小片','昌感小片'],
+                '邵将片': ['邵武小片', '将乐小片'], '粤台片': ['梅惠小片', '龙华小片'],
+                '长益片': ['长株潭\n小片', '益沅小片', '岳阳小片'],
+                '娄邵片': ['湘双小片', '涟梅小片', '新化小片', '武邵小片', '绥会小片'],
+                '衡州片': ['衡阳小片', '衡山小片'], '永全片': ['东祁小片', '道江小片', '全资小片'],
+                '江淮官话': ['泰如片', '洪巢片', '黄孝片'], '北京官话': ['京承片', '朝峰片'],
+                '东北官话': ['吉沈片', '哈阜片','黑松片'], '冀鲁官话': ['宝唐片', '石济片','沧惠片'],
+                '胶辽官话': ['登连片', '青莱片','盖桓片'],
+                '中原官话': ['郑开片', '洛嵩片', '南鲁片', '商阜片', '信蚌片', '汾河片', '关中片', '秦陇片', '陇中片','南疆片'],
+                '西南官话': ['川黔片', '西蜀片', '川西片', '云南片', '湖广片'],
+                '兰银官话': ['金城片', '河西片', '银吴片', '北疆片'],
+                '吕梁片': ['汾州小片', '隰县小片'], '上党片': ['长治小片', '晋城小片'],
+                '邯新片': ['磁漳小片', '获济小片']
+            };
+            const bubbleRadius = 35; const L2bubbleRadius = 30;
+            const bubbleClusterRadiusLevel1 = 90; const bubbleClusterRadiusLevel2 = 80;
+            const lineLengthLevel1 = 150; const lineLengthLevel2 = 280;
+            const lineStyle = { stroke: '#aaa', lineWidth: 2, opacity: 1 };
+            const bubbleColors = { level1: '#f3b04d', level2: '#77c4ed' };
+            const animDurationLine = 700; const animDurationBubble = 600; const animDelayStep = 80;
+            let activeAnimationTimers = [];
+
+            // TJL添加功能
+            let networkChart = null;
+            const dataFileMap = {
+            '客家话': 'networks/ke.js',
+            '吴语':   'networks/wu.js',
+            '粤语':   'networks/yue.js',
+            '湘语':   'networks/xiang.js',
+            '赣语':   'networks/gan.js',
+            '闽语':   'networks/min.js',
+            "晋语":   'networks/jin.js',
+            // 按需继续添加
+            };
+
+            // 显示指定方言的网络图
+            function showDialectNetwork(dialectName) {
+                const file = dataFileMap[dialectName];
+                if (!file) return;
+
+                // 新增：隐藏提示信息，显示网络图和滑动条
+                document.getElementById('network-placeholder').style.display = 'none';
+                document.getElementById('network-main').style.display = 'block';
+                document.querySelector('#network-container .slider-container').style.display = 'block';
+
+                // Trigger echarts container's resize, to ensure map and network graph can draw correctly
+                if (myChart && !myChart.isDisposed()) {
+                    myChart.resize();
+                }
+
+                const script = document.createElement('script');
+                script.src = file;
+                script.onload = () => {
+                    if (networkChart) {
+                        networkChart.dispose();
+                    }
+                    networkChart = echarts.init(document.getElementById('network-main'));
+
+                    data.nodes.forEach(node => { node.symbolSize = 50; });
+                    networkChart.setOption({
+                        series: [{
+                            type: 'graph',
+                            layout: 'force',
+                            data: data.nodes.map(function (node) {
+                                return {
+                                    ...node,
+                                    itemStyle: {
+                                        color: '#F3F3F3', 
+                                        borderColor: '#86ADAD', 
+                                        borderWidth: 2.5, 
+                                    },
+                                };
+                            }),
+                            links: data.links.map(function (link) {
+                                return {
+                                    source: link.source,
+                                    target: link.target,
+                                    label: {
+                                        show: false, 
+                                        formatter: '相似度：' + link.similarity,
+                                    },
+                                    lineStyle: {
+                                        opacity: 0.5,
+                                        width: 2,
+                                        curveness: 0,
+                                    },
+                                    emphasis: {
+                                        label: {
+                                            show: true 
+                                        }
+                                    }
+                                };
+                            }),
+                            label: { show: true, position: 'inside' },
+                            force: {
+                            repulsion: 200,
+                            edgeLength: 200,
+                            gravity: 0.1,
+                            }
+                        }]
+                    });
+
+                    document.getElementById('myRange').oninput = function() {
+                        const val = this.value;
+                        document.getElementById('sliderValue').innerText = '相似度：' + val;
+                        const filteredLinks = data.links.filter(link => link.similarity >= val); // Corrected: was val + 50
+                        data.nodes.forEach(node => { node.symbolSize = 50; });
+                        networkChart.setOption({
+                            series: [{
+                                data: data.nodes.map(function (node) { // Ensure nodes are always included
+                                    return {
+                                        ...node,
+                                        itemStyle: {
+                                            color: '#F3F3F3',
+                                            borderColor: '#86ADAD',
+                                            borderWidth: 2.5,
+                                        },
+                                    };
+                                }),
+                                links: filteredLinks.map(function (link) {
+                                    return {
+                                        source: link.source,
+                                        target: link.target,
+                                        label: {
+                                            show: false,
+                                            formatter: '相似度：' + link.similarity,
+                                        },
+                                        lineStyle: {
+                                            opacity: 0.5,
+                                            width: 2,
+                                            curveness: 0,
+                                        },
+                                        emphasis: {
+                                            label: {
+                                                show: true
+                                            }
+                                        }
+                                    };
+                                }),
+                            }]
+                        });
+                    };
+                    // Trigger initial filter based on current slider value
+                    document.getElementById('myRange').dispatchEvent(new Event('input'));
+
+                };
+                document.head.appendChild(script);
+                // Clean up script tag after loading
+                script.addEventListener('load', () => {
+                    if (script.parentNode) {
+                        script.parentNode.removeChild(script);
+                    }
+                });
+                script.addEventListener('error', () => {
+                     console.error(`Failed to load script: ${file}`);
+                    if (script.parentNode) {
+                        script.parentNode.removeChild(script);
+                    }
+                });
+            }
+
+            // MODIFIED: Function to hide network with fade-out
+            // 修改后的函数
+            function hideNetwork() {
+                // 新增：显示提示信息，隐藏网络图和滑动条
+                document.getElementById('network-placeholder').style.display = 'flex';
+                document.getElementById('network-main').style.display = 'none';
+                document.querySelector('#network-container .slider-container').style.display = 'none';
+
+                if (myChart && !myChart.isDisposed()) {
+                    myChart.resize();
+                }
+                
+                // 直接清理图表实例
+                if (networkChart) {
+                    networkChart.dispose();
+                    networkChart = null;
+                }
+            }
+            // TJL添加功能
+
+            function clearActiveTimers() {
+                activeAnimationTimers.forEach(timerId => clearTimeout(timerId));
+                activeAnimationTimers = [];
+            }
+            function makeElementsStatic(elements) {
+                if (!Array.isArray(elements)) return [];
+                return elements.map(el => {
+                    if (!el) return el;
+                    const staticEl = { ...el };
+                    delete staticEl.enterFrom; delete staticEl.transition; delete staticEl.animationDelay;
+                    delete staticEl.animationDuration; delete staticEl.animationDurationUpdate;
+                    delete staticEl.animationEasing; delete staticEl.animationEasingUpdate;
+                    if (staticEl.style) { staticEl.style.opacity = 1; }
+                    return staticEl;
+                });
+            }
+            function clearBubbles() {
+                console.log("Clearing bubbles and lines.");
+                clearActiveTimers();
+                hideTooltip(); // 新增：清除气泡时隐藏提示
+                if (myChart && !myChart.isDisposed()) {
+                    myChart.setOption({ graphic: { elements: [] } }, { replaceMerge: ['graphic'] });
+                }
+            }
+
+            function createTooltipElement() {
+                let tooltip = document.getElementById('bubble-tooltip');
+                if (!tooltip) {
+                    tooltip = document.createElement('div');
+                    tooltip.id = 'bubble-tooltip';
+                    tooltip.style.cssText = `
+                        position: absolute;
+                        background: rgba(0, 0, 0, 0.8);
+                        color: white;
+                        padding: 10px;
+                        border-radius: 5px;
+                        font-size: 12px;
+                        max-width: 300px;
+                        word-wrap: break-word;
+                        z-index: 1000;
+                        pointer-events: none;
+                        display: none;
+                        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                    `;
+                    document.body.appendChild(tooltip);
+                }
+                return tooltip;
+            }
+
+            // 4. 显示提示文字函数
+            function showTooltip(x, y, text) {
+                const tooltip = createTooltipElement();
+                tooltip.innerHTML = text;
+                tooltip.style.left = (x + 10) + 'px';
+                tooltip.style.top = (y - 10) + 'px';
+                tooltip.style.display = 'block';
+            }
+
+            // 5. 隐藏提示文字函数
+            function hideTooltip() {
+                const tooltip = document.getElementById('bubble-tooltip');
+                if (tooltip) {
+                    tooltip.style.display = 'none';
+                }
+            }
+
+            function createLevel1BubblesSequentially(originPoint, dataList, parentName) {
+                console.log(`Creating Level 1 Bubbles - Parent: ${parentName}`);
+                clearActiveTimers();
+                if (!myChart || myChart.isDisposed() || !dataList || dataList.length === 0) {
+                    if (myChart && !myChart.isDisposed()) myChart.setOption({ graphic: { elements: [] } }, { replaceMerge: ['graphic'] });
+                    return;
+                }
+                const lineLength = lineLengthLevel1; const clusterRadius = bubbleClusterRadiusLevel1;
+                const bubbleColor = bubbleColors.level1;
+                const clusterCenterX = originPoint[0] + lineLength; const clusterCenterY = originPoint[1];
+                const clusterCenter = [clusterCenterX, clusterCenterY];
+                const controlPointX = originPoint[0] + lineLength * 0.5; const controlPointY = originPoint[1] - lineLength * 0.4;
+                const mainLineElement = {
+                    type: 'bezierCurve', id: 'mainLine_L1', level: 1,
+                    shape: { x1: originPoint[0], y1: originPoint[1], x2: clusterCenter[0], y2: clusterCenter[1], cpx1: controlPointX, cpy1: controlPointY },
+                    enterFrom: { shape: { x2: originPoint[0], y2: originPoint[1], cpx1: originPoint[0], cpy1: originPoint[1] }, style: { opacity: 0 } },
+                    transition: ['shape', 'style'], animationDuration: animDurationLine, animationDelay: 0,
+                    style: { ...lineStyle }, z: 99, silent: true
+                };
+                myChart.setOption({ graphic: { elements: [mainLineElement] } }, { replaceMerge: ['graphic'] });
+                const timer1 = setTimeout(() => {
+                    if (!myChart || myChart.isDisposed()) return;
+                    const staticMainLine = makeElementsStatic([mainLineElement])[0];
+                    const clusterLineElements = []; const bubbleAndTextElements = [];
+                    const angleStep = dataList.length > 0 ? (2 * Math.PI) / dataList.length : 0;
+                    dataList.forEach((itemName, index) => {
+                        const angle = index * angleStep - Math.PI / 2;
+                        const bubbleX = clusterCenter[0] + Math.cos(angle) * clusterRadius;
+                        const bubbleY = clusterCenter[1] + Math.sin(angle) * clusterRadius;
+                        const finalPosition = [bubbleX, bubbleY];
+                        const dx = bubbleX - clusterCenter[0]; const dy = bubbleY - clusterCenter[1];
+                        const perpX = -dy * 0.3; const perpY = dx * 0.3;
+                        const cpxClust = clusterCenter[0] + dx * 0.5 + perpX; const cpyClust = clusterCenter[1] + dy * 0.5 + perpY;
+                        clusterLineElements.push({
+                            type: 'bezierCurve', id: `clusterLine_L1_${index}`, level: 1,
+                            shape: { x1: clusterCenter[0], y1: clusterCenter[1], x2: bubbleX, y2: bubbleY, cpx1: cpxClust, cpy1: cpyClust },
+                            enterFrom: { shape: { x2: clusterCenter[0], y2: clusterCenter[1], cpx1: clusterCenter[0], cpy1: clusterCenter[1] }, style: { opacity: 0 } },
+                            transition: ['shape', 'style'], animationDuration: animDurationLine, animationDelay: 0,
+                            style: { ...lineStyle }, z: 98, silent: true
+                        });
+                        const bubbleDelay = index * animDelayStep;
+                        bubbleAndTextElements.push({
+                            type: 'circle', 
+                            id: `bubble_L1_${itemName}`, 
+                            bubbleName: itemName, 
+                            bubbleLevel: 1, 
+                            parentName: parentName,
+                            shape: { cx: 0, cy: 0, r: bubbleRadius }, 
+                            position: finalPosition,
+                            style: { 
+                                fill: bubbleColor, 
+                                shadowBlur: 5, 
+                                shadowColor: 'rgba(0,0,0,0.3)', 
+                                shadowOffsetX: 2, 
+                                shadowOffsetY: 2, 
+                                opacity: 1 
+                            },
+                            enterFrom: { position: clusterCenter, style: { opacity: 0 } }, 
+                            transition: ['position', 'style'],
+                            animationDelay: bubbleDelay, 
+                            animationDuration: animDurationBubble, 
+                            z: 100,
+                            onclick: (params) => handleL1BubbleClick(params, finalPosition, itemName, parentName),
+                            // 新增悬浮事件处理
+                            onmouseover: function(params) {
+                                const description = descriptionData[itemName] || `${itemName}的详细介绍暂未提供。`;
+                                const mouseX = params.event?.event?.clientX || params.event?.offsetX || 0;
+                                const mouseY = params.event?.event?.clientY || params.event?.offsetY || 0;
+                                showTooltip(mouseX, mouseY, `<strong>${itemName}</strong><br/>${description}`);
+                            },
+                            onmouseout: function() {
+                                hideTooltip();
+                            }
+                        });
+                        bubbleAndTextElements.push({
+                            type: 'text', 
+                            id: `text_L1_${itemName}`, 
+                            bubbleName: itemName, 
+                            bubbleLevel: 1, 
+                            parentName: parentName,
+                            position: finalPosition,
+                            style: { 
+                                text: itemName, 
+                                fill: '#333', 
+                                textAlign: 'center', 
+                                textVerticalAlign: 'middle', 
+                                fontSize: 13, 
+                                fontWeight: 'bold', 
+                                opacity: 1 
+                            },
+                            enterFrom: { position: clusterCenter, style: { opacity: 0 } }, 
+                            transition: ['position', 'style'],
+                            animationDelay: bubbleDelay, 
+                            animationDuration: animDurationBubble, 
+                            z: 101, 
+                            silent: false, // 改为 false 以启用鼠标事件
+                            // 新增悬浮事件处理
+                            onmouseover: function(params) {
+                                const description = descriptionData[itemName] || `${itemName}的详细介绍暂未提供。`;
+                                const mouseX = params.event?.event?.clientX || params.event?.offsetX || 0;
+                                const mouseY = params.event?.event?.clientY || params.event?.offsetY || 0;
+                                showTooltip(mouseX, mouseY, `<strong>${itemName}</strong><br/>${description}`);
+                            },
+                            onmouseout: function() {
+                                hideTooltip();
+                            }
+                        });
+                    });
+                    myChart.setOption({ graphic: { elements: [staticMainLine, ...clusterLineElements, ...bubbleAndTextElements] } }, { replaceMerge: ['graphic'] });
+                }, animDurationLine);
+                activeAnimationTimers.push(timer1);
+            }
+            function handleL1BubbleClick(params, originPoint, itemName, parentName) {
+                console.log(`Clicked Bubble: Level 1, Name: ${itemName}, Parent: ${parentName}`);
+                clearActiveTimers();
+                if (!myChart || myChart.isDisposed()) return;
+                const level2Data = areaData[itemName];
+                const currentGraphics = myChart.getOption().graphic?.[0]?.elements || [];
+                const level1ElementsToKeep = currentGraphics.filter(el => el && !(el.level === 2 || el.bubbleLevel === 2));
+                const level1StaticElements = makeElementsStatic(level1ElementsToKeep);
+
+                if (!level2Data || level2Data.length === 0) {
+                    console.log(`No L2 data for ${itemName}. Clearing only L2 if present.`);
+                    myChart.setOption({ graphic: { elements: level1StaticElements } }, { replaceMerge: ['graphic'] });
+                    return;
+                }
+                console.log(`Preserving ${level1StaticElements.length} static L1 elements.`);
+                const l2LineLength = lineLengthLevel2; const l2ClusterRadius = bubbleClusterRadiusLevel2;
+                const l2BubbleColor = bubbleColors.level2;
+                const l2ClusterCenterX = originPoint[0] + l2LineLength; const l2ClusterCenterY = originPoint[1] + 40;
+                const l2ClusterCenter = [l2ClusterCenterX, l2ClusterCenterY];
+                const l2ControlPointX = originPoint[0] + l2LineLength * 0.5; const l2ControlPointY = originPoint[1] - l2LineLength * 0.4;
+                const l2MainLineElement = {
+                    type: 'bezierCurve', id: 'mainLine_L2', level: 2,
+                    shape: { x1: originPoint[0], y1: originPoint[1], x2: l2ClusterCenter[0], y2: l2ClusterCenter[1], cpx1: l2ControlPointX, cpy1: l2ControlPointY },
+                    enterFrom: { shape: { x2: originPoint[0], y2: originPoint[1], cpx1: originPoint[0], cpy1: originPoint[1] }, style: { opacity: 0 } },
+                    transition: ['shape', 'style'], animationDuration: animDurationLine, animationDelay: 0,
+                    style: { ...lineStyle }, z: 99, silent: true
+                };
+                myChart.setOption({ graphic: { elements: [...level1StaticElements, l2MainLineElement] } }, { replaceMerge: ['graphic'] });
+                const timerL2_1 = setTimeout(() => {
+                    if (!myChart || myChart.isDisposed()) return;
+                    const staticL2MainLine = makeElementsStatic([l2MainLineElement])[0];
+                    const l2ClusterLineElements = []; const l2BubbleAndTextElements = [];
+                    const l2AngleStep = level2Data.length > 0 ? (2 * Math.PI) / level2Data.length : 0;
+                    level2Data.forEach((itemNameL2, indexL2) => {
+                        const l2Angle = indexL2 * l2AngleStep - Math.PI / 2;
+                        const l2BubbleX = l2ClusterCenter[0] + Math.cos(l2Angle) * l2ClusterRadius;
+                        const l2BubbleY = l2ClusterCenter[1] + Math.sin(l2Angle) * l2ClusterRadius;
+                        const l2FinalPosition = [l2BubbleX, l2BubbleY];
+                        const dxL2 = l2BubbleX - l2ClusterCenter[0]; const dyL2 = l2BubbleY - l2ClusterCenter[1];
+                        const perpXL2 = -dyL2 * 0.3; const perpYL2 = dxL2 * 0.3;
+                        const l2CpxClust = l2ClusterCenter[0] + dxL2 * 0.5 + perpXL2; const l2CpyClust = l2ClusterCenter[1] + dyL2 * 0.5 + perpYL2;
+                        l2ClusterLineElements.push({
+                            type: 'bezierCurve', id: `clusterLine_L2_${indexL2}`, level: 2,
+                            shape: { x1: l2ClusterCenter[0], y1: l2ClusterCenter[1], x2: l2BubbleX, y2: l2BubbleY, cpx1: l2CpxClust, cpy1: l2CpyClust },
+                            enterFrom: { shape: { x2: l2ClusterCenter[0], y2: l2ClusterCenter[1], cpx1: l2ClusterCenter[0], cpy1: l2ClusterCenter[1] }, style: { opacity: 0 } },
+                            transition: ['shape', 'style'], animationDuration: animDurationLine, animationDelay: 0,
+                            style: { ...lineStyle }, z: 98, silent: true
+                        });
+                        const l2BubbleDelay = indexL2 * animDelayStep;
+                        l2BubbleAndTextElements.push({
+                            type: 'circle', id: `bubble_L2_${itemNameL2}`, bubbleName: itemNameL2, bubbleLevel: 2, parentName: itemName,
+                            shape: { cx: 0, cy: 0, r: L2bubbleRadius }, position: l2FinalPosition,
+                            style: { fill: l2BubbleColor, shadowBlur: 5, shadowColor: 'rgba(0,0,0,0.3)', shadowOffsetX: 2, shadowOffsetY: 2, opacity: 1 },
+                            enterFrom: { position: l2ClusterCenter, style: { opacity: 0 } }, transition: ['position', 'style'],
+                            animationDelay: l2BubbleDelay, animationDuration: animDurationBubble, z: 100,
+                            onclick: function() { console.log(`Clicked Level 2 Bubble: ${itemNameL2}`); clearBubbles(); }
+                        });
+                        l2BubbleAndTextElements.push({
+                            type: 'text', id: `text_L2_${itemNameL2}`, bubbleName: itemNameL2, bubbleLevel: 2, parentName: itemName,
+                            position: l2FinalPosition,
+                            style: { text: itemNameL2, fill: '#333', textAlign: 'center', textVerticalAlign: 'middle', fontSize: 13, fontWeight: 'bold', opacity: 1 },
+                            enterFrom: { position: l2ClusterCenter, style: { opacity: 0 } }, transition: ['position', 'style'],
+                            animationDelay: l2BubbleDelay, animationDuration: animDurationBubble, z: 101, silent: true
+                        });
+                    });
+                    myChart.setOption({ graphic: { elements: [...level1StaticElements, staticL2MainLine, ...l2ClusterLineElements, ...l2BubbleAndTextElements] } }, { replaceMerge: ['graphic'] });
+                }, animDurationLine);
+                activeAnimationTimers.push(timerL2_1);
+            }
+
+            function setupTimeSlider() {
+                if (!populationDataByTime || Object.keys(populationDataByTime).length === 0) {
+                    timeSliderContainer.style.display = 'none';
+                    return;
+                }
+                availableTimeNodes = Object.keys(populationDataByTime).sort((a, b) => a.localeCompare(b, undefined, {numeric: true}));
+                if (availableTimeNodes.length > 0) {
+                    timeSlider.min = 0;
+                    timeSlider.max = availableTimeNodes.length - 1;
+                    const defaultTimeIndex = availableTimeNodes.length - 1;
+                    timeSlider.value = defaultTimeIndex;
+                    currentSelectedTimeNode = availableTimeNodes[defaultTimeIndex];
+                    currentTimeLabel.textContent = currentSelectedTimeNode;
+                    timeSliderContainer.style.display = 'flex';
+                } else {
+                    timeSliderContainer.style.display = 'none';
+                }
+            }
+
+            timeSlider.addEventListener('input', function() {
+                currentSelectedTimeNode = availableTimeNodes[this.value];
+                currentTimeLabel.textContent = currentSelectedTimeNode;
+                if (currentView === 'population') {
+                    updateChartView('population');
+                }
+            });
+
+            function updateChartView(viewType) {
+                if (!myChart || myChart.isDisposed() || !baseMapData || !populationDataByTime) {
+                    console.warn("Chart or data not ready for view update.");
+                    return;
+                }
+                console.log(`Switching view to: ${viewType}`);
+                currentView = viewType;
+                clearBubbles();
+
+                let globalTooltip = {
+                    trigger: 'item',
+                    backgroundColor: 'rgba(0,0,0,0.8)',
+                    borderColor: '#777',
+                    borderWidth: 1,
+                    textStyle: {
+                        color: '#fff'
+                    },
+                };
+
+            
+                let newOption = {};
+                const baseGeoConfig = {
+                    map: 'china', roam: true, selectedMode: false,
+                    emphasis: { 
+                        focus: 'self', 
+                        itemStyle: { areaColor: '#a4d5f2', borderColor: '#fff', borderWidth: 1.5 }, 
+                        label: { show: true }
+                        // 移除这里的 tooltip:{show:true}
+                    },
+                    itemStyle: { borderColor: 'rgb(157,129,92)', borderWidth: 1,shadowColor: 'rgba(0, 0, 0, 0.5)', shadowBlur: 2},
+                    label: {
+                        show: true,
+                        formatter: params => params.data ? `${params.name}` : params.name,
+                        color: 'rgba(0,0,0,0.7)', fontSize: 16, position: 'inside',
+                        textShadowColor: 'rgba(255, 255, 255, 0.7)', // 白色阴影
+                        textShadowBlur: 2,
+                        textShadowOffsetX: 1,
+                        textShadowOffsetY: 1
+                    },
+                    // TJL
+                    layoutCenter: ['32.5%', '50%'], // CHANGED
+                    layoutSize: '90%'
+                    // TJL
+                };
+                const configuredRegions = [];
+                if (baseMapData && baseMapData.features) {
+                    baseMapData.features.forEach(feature => {
+                        const name = feature?.properties?.name;
+                        if (name) {
+                            let regionSpecificConfig = { name: name };
+                            let labelConfig = regionSpecificConfig.label || {};
+                            let labelConfigForRegion = {};
+                            let needsLabelOverride = false;
+                            if (customLabelOffsets[name]) {
+                                labelConfigForRegion.offset = customLabelOffsets[name];
+                                labelConfigForRegion.show = true; // 确保标签显示
+                                needsLabelOverride = true;
+                            }
+
+                            if (customLabelFontColors[name]) { // 例如 'white'
+                                labelConfigForRegion.color = customLabelFontColors[name];
+                                labelConfigForRegion.show = true; // 确保标签显示
+                                // --- 新增：如果文字是浅色 (如白色)，则添加黑色阴影 ---
+                                if (customLabelFontColors[name].toLowerCase() === 'white' || 
+                                    customLabelFontColors[name].toLowerCase() === '#fff' ||
+                                    customLabelFontColors[name].toLowerCase() === '#ffffff') {
+                                    labelConfigForRegion.textShadowColor = 'rgba(0, 0, 0, 0.7)'; // 黑色阴影
+                                    labelConfigForRegion.textShadowBlur = 5;
+                                    labelConfigForRegion.textShadowOffsetX = 1;
+                                    labelConfigForRegion.textShadowOffsetY = 1;
+                                }
+                                else {
+                                     labelConfigForRegion.textShadowColor = 'rgba(255, 255, 255, 0.7)'; // (与默认一致)
+                                     labelConfigForRegion.textShadowBlur = 5;
+                                     labelConfigForRegion.textShadowOffsetX = 1;
+                                     labelConfigForRegion.textShadowOffsetY = 1;
+                                }
+                                // --- 结束新增 ---
+                                needsLabelOverride = true;
+                            }
+                            
+                            // 如果没有自定义颜色，它将使用 baseGeoConfig.label 中的默认颜色和阴影
+                            // 如果有自定义颜色但不是白色（例如，如果将来添加其他自定义颜色），
+                            // 并且需要不同的阴影逻辑，可以在此处扩展。
+                            // 目前，非白色自定义颜色将退回到 baseGeoConfig 的阴影（如果未在此处明确设置）。
+                            // 为了确保所有自定义颜色都有明确的阴影，可以添加一个else:
+                            else if (needsLabelOverride) { // 如果有offset但没有自定义颜色
+                                // 此时会继承 baseGeoConfig.label 的颜色和阴影
+                                // 如果需要为这些情况单独设置阴影，可以在这里设置
+                                // labelConfigForRegion.textShadowColor = 'rgba(255, 255, 255, 0.7)'; // (与默认一致)
+                                // labelConfigForRegion.textShadowBlur = 2;
+                                // ...
+                            }
+
+
+                            if (needsLabelOverride) {
+                                regionSpecificConfig.label = labelConfigForRegion;
+                            }
+
+                            if (viewType === 'dialectArea') {
+                                regionSpecificConfig.itemStyle = { areaColor: dialectColors[name] || '#cccccc' };
+                            }
+                            configuredRegions.push(regionSpecificConfig);
+                        }
+                    });
+                }
+
+                if (viewType === 'population') {
+                    timeSliderContainer.style.display = 'flex';
+                    const currentPopDataRaw = populationDataByTime[currentSelectedTimeNode] || [];
+                    const processedPopData = currentPopDataRaw.map(item => {
+                        if (item.name === mandarinDialectName) {
+                            return {
+                                ...item,
+                                value: visualMapMaxPopulation_NonMandarin,
+                                originalValue: item.value
+                            };
+                        }
+                        return item;
+                    });
+
+                    newOption = {
+                        tooltip: globalTooltip, // 添加全局tooltip
+                        visualMap: {
+                            show: true, geoIndex: 0,
+                            min: visualMapMinPopulation_NonMandarin,
+                            max: visualMapMaxPopulation_NonMandarin,
+                            left: 'left', top: 'bottom',
+                            text: [`高 (${visualMapMaxPopulation_NonMandarin.toLocaleString()}万)`, `低 (${visualMapMinPopulation_NonMandarin.toLocaleString()}万)`],
+                            calculable: true,
+                            inRange: { color: ['rgb(243,240,221)','rgb(126,100,73)'] },
+                            textStyle: { color: '#333' }, outOfRange: { color: '#cccccc' }
+                        },
+                        legend: { show: false },
+                        geo: { ...baseGeoConfig, regions: configuredRegions, itemStyle: { ...baseGeoConfig.itemStyle, areaColor: undefined } },
+                        series: [{
+                            id: 'mapSeries', type: 'map', map: 'china', geoIndex: 0,
+                            data: processedPopData,
+                            emphasis: { label: { show: true } }, // 移除这里的tooltip:{show:true}
+                            select: { disabled: true }, 
+                            itemStyle: undefined,
+                            // 移除series级别的tooltip配置，使用全局tooltip
+                        }]
+                    };
+                    // 在 updateChartView 函数中，替换方言区域视图的完整配置
+
+                    } else if (viewType === 'dialectArea') {
+                        timeSliderContainer.style.display = 'none';
+                        let representativePopData = [];
+                        if (availableTimeNodes.length > 0) {
+                            const repTimeNode = availableTimeNodes[availableTimeNodes.length -1];
+                            representativePopData = populationDataByTime[repTimeNode] || [];
+                        }
+
+                        const dialectAreaData = representativePopData.map(item => ({
+                            name: item.name, // 区域名称，用于匹配地图区域和显示tooltip
+                            value: item.value, // 人口数据或其他数值，用于tooltip显示
+                            itemStyle: { color: dialectColors[item.name] || '#cccccc' } // 显式指定区域颜色
+                        }));
+                        
+                    newOption = {
+                        tooltip: globalTooltip, // 全局 tooltip 配置
+                        visualMap: { show: false }, // 方言视图不显示 visualMap
+                        legend: { // 图例配置
+                            show: true, orient: 'vertical', left: 'left', top: 'bottom',
+                            data: dialectLegendData,
+                            selectedMode: false, textStyle: { color: '#333' },
+                            backgroundColor: 'rgba(255,255,255,0.7)', padding: 5, itemWidth: 15, itemHeight: 10
+                        },
+                        geo: { 
+                            ...baseGeoConfig, 
+                            regions: configuredRegions, // configuredRegions 用于标签等，颜色会被 series.data 覆盖
+                            itemStyle: { ...baseGeoConfig.itemStyle, areaColor: undefined } // 避免 geo 全局颜色影响
+                        },
+                        series: [{
+                            id: 'mapSeries', type: 'map', map: 'china', geoIndex: 0,
+                            data: dialectAreaData, // 使用新生成的、包含所有区域颜色信息的 dialectAreaData
+                            emphasis: { label: { show: true } },
+                            select: { disabled: true }
+                        }]
+                    };
+                }
+                    if (viewType === 'population') {
+                        newOption.tooltip.formatter = function (params) {
+                            if (params.data) {
+                                const displayValue = params.data.originalValue !== undefined ? params.data.originalValue : params.data.value;
+                                const value = (typeof displayValue === 'number' && !isNaN(displayValue)) ? displayValue : 'N/A';
+                                const unit = (value === 'N/A' || typeof value !== 'number') ? '' : ' 万';
+                                
+                                let popStr = `${value === 'N/A' ? value : value.toLocaleString()}${unit}`;
+                                let note = '';
+                                if (params.name === mandarinDialectName && params.data.value === visualMapMaxPopulation_NonMandarin && params.data.originalValue !== undefined) {
+                                }
+                                return `${params.name} (${currentSelectedTimeNode || '未知时间'})<br/>人口: ${popStr}${note}`;
+                            }
+                            return `${params.name} (${currentSelectedTimeNode || '未知时间'})`;
+                        };
+                    } else if (viewType === 'dialectArea') {
+                        newOption.tooltip.formatter = function (params) {
+                            let popValueStr = 'N/A';
+                            if (params.data && params.data.value !== undefined) {
+                                popValueStr = params.data.value;
+                                const unit = (typeof popValueStr === 'number') ? ' 万' : '';
+                                popValueStr = `${popValueStr.toLocaleString()}${unit}`;
+                            }
+                            const dialectColor = dialectColors[params.name];
+                            let colorIndicator = dialectColor ? `<span style="display:inline-block;margin-right:5px;border-radius:10px;width:10px;height:10px;background-color:${dialectColor};"></span>` : '';
+                            return `${colorIndicator}${params.name}<br/>人口: ${popValueStr}`;
+                        };
+                    }
+                    
+                    myChart.setOption(newOption, { replaceMerge: ['visualMap', 'legend', 'geo', 'series', 'tooltip'] });
+                    console.log("View updated to:", currentView);
+                }
+
+                Promise.all([
+                    fetch('poly.json').then(response => response.ok ? response.json() : Promise.reject(`poly.json: ${response.statusText} (${response.status})`)),
+                    fetch('pop_time.json').then(response => response.ok ? response.json() : Promise.reject(`pop_time.json: ${response.statusText} (${response.status})`)),
+                    fetch('description.json').then(response => response.ok ? response.json() : Promise.reject(`description.json: ${response.statusText} (${response.status})`))
+                ])
+                .then(([chinaJson, popTimeData, descData]) => {
+                    console.log("GeoJSON, Time-Series Population Data and Description Data loaded.");
+                    baseMapData = chinaJson;
+                    populationDataByTime = popTimeData;
+                    descriptionData = descData; // 存储介绍文字数据
+
+                let allPopulationValues = [];
+                let nonMandarinPopulationValues = [];
+
+                if (populationDataByTime) {
+                    for (const timeNode in populationDataByTime) {
+                        if (populationDataByTime.hasOwnProperty(timeNode)) {
+                            const dataForTime = populationDataByTime[timeNode] || [];
+                            dataForTime.forEach(item => {
+                                if (typeof item.value === 'number' && !isNaN(item.value)) {
+                                    allPopulationValues.push(item.value);
+                                    if (item.name !== mandarinDialectName) {
+                                        nonMandarinPopulationValues.push(item.value);
+                                    }
+                                }
+                            });
+                        }
+                    }
+                }
+
+                if (allPopulationValues.length > 0) {
+                    globalMinPopulation = Math.min(...allPopulationValues);
+                    globalMaxPopulation = Math.max(...allPopulationValues);
+                    if (globalMinPopulation === globalMaxPopulation) {
+                        if (globalMinPopulation > 0) {
+                             globalMinPopulation = Math.floor(globalMinPopulation * 0.9);
+                        } else {
+                             globalMinPopulation = 0;
+                        }
+                        globalMaxPopulation = Math.ceil(globalMaxPopulation * 1.1) || 1;
+                        if (globalMinPopulation === globalMaxPopulation && globalMaxPopulation === 0) globalMaxPopulation = 1;
+                        if (globalMinPopulation === globalMaxPopulation && globalMaxPopulation > 0) globalMaxPopulation +=1;
+                    }
+                } else {
+                    globalMinPopulation = 0;
+                    globalMaxPopulation = 1000;
+                    console.warn("No valid population data found for global min/max. Using defaults.");
+                }
+                console.log(`Global Population Actual Min: ${globalMinPopulation}, Max: ${globalMaxPopulation}`);
+
+                if (nonMandarinPopulationValues.length > 0) {
+                    visualMapMinPopulation_NonMandarin = Math.min(...nonMandarinPopulationValues);
+                    visualMapMaxPopulation_NonMandarin = Math.max(...nonMandarinPopulationValues);
+                     if (visualMapMinPopulation_NonMandarin === visualMapMaxPopulation_NonMandarin) {
+                        if (visualMapMinPopulation_NonMandarin > 0) {
+                             visualMapMinPopulation_NonMandarin = Math.floor(visualMapMinPopulation_NonMandarin * 0.9);
+                        } else {
+                             visualMapMinPopulation_NonMandarin = 0;
+                        }
+                        visualMapMaxPopulation_NonMandarin = Math.ceil(visualMapMaxPopulation_NonMandarin * 1.1) || 1;
+                        if (visualMapMinPopulation_NonMandarin === visualMapMaxPopulation_NonMandarin && visualMapMaxPopulation_NonMandarin === 0) visualMapMaxPopulation_NonMandarin = 1;
+                        if (visualMapMinPopulation_NonMandarin === visualMapMaxPopulation_NonMandarin && visualMapMaxPopulation_NonMandarin > 0) visualMapMaxPopulation_NonMandarin +=1;
+                    }
+                } else {
+                    visualMapMinPopulation_NonMandarin = 0;
+                    visualMapMaxPopulation_NonMandarin = globalMaxPopulation > 0 ? globalMaxPopulation : 1000;
+                    console.warn("No non-Mandarin population data found for visualMap scale. Falling back to global max or default.");
+                }
+                console.log(`VisualMap Scale (Non-Mandarin) Min: ${visualMapMinPopulation_NonMandarin}, Max: ${visualMapMaxPopulation_NonMandarin}`);
+
+                setupTimeSlider();
+
+                const dialectNames = new Set();
+                if (baseMapData && baseMapData.features) {
+                    baseMapData.features.forEach(feature => {
+                        const name = feature?.properties?.name;
+                        if (name) dialectNames.add(name);
+                        else console.warn("GeoJSON feature found without 'properties.name'.", feature);
+                    });
+                }
+                
+
+                const fixedColorMap = {};
+                Object.keys(targetDialectStyles).forEach(key => {
+                    fixedColorMap[key] = targetDialectStyles[key];
+                });
+
+                // Populate dialectColors using fixedColorMap, and dialectLegendData
+                dialectLegendData = []; // Reset
+                Array.from(dialectNames).sort().forEach(name => {
+                    const color = fixedColorMap[name] || '#cccccc'; // Use fixed color or default to gray
+                    dialectColors[name] = color; // Store in the global dialectColors object
+                    dialectLegendData.push({
+                        name: name,
+                        itemStyle: {
+                            color: color
+                        }
+                    });
+                });
+                // --- END MODIFIED ---
+                
+
+
+                echarts.registerMap('china', chinaJson);
+                option = {
+                    tooltip: { trigger: 'item' }, geo: { map: 'china', roam: true },
+                    series: [], graphic: { elements: [] }
+                };
+                myChart.setOption(option);
+                updateChartView(currentView); // Initial view update
+
+                myChart.on('click', function (params) {
+                    if (!myChart || myChart.isDisposed()) return;
+                    if (params.componentType === 'graphic') { return; }
+                    if ((params.componentType === 'geo' || params.componentType === 'series') && params.name ) {
+                        const regionName = params.name;
+                        console.log(`Clicked Map Region: ${regionName}`);
+                        sessionStorage.setItem('dashboard_selected_dialect', regionName);
+                        let clickedDialect = regionName;
+                        if (baseMapData && baseMapData.features) {
+                            const clickedFeature = baseMapData.features.find(f => f?.properties?.name === regionName);
+                            if (clickedFeature) clickedDialect = clickedFeature.properties.name;
+                        }
+                        const primaryData = districtData[clickedDialect];
+                        clearBubbles();
+                        // TJL添加功能
+                        // 触发网络图显示
+                        showDialectNetwork(regionName);
+                        if (primaryData) {
+                            let clickPos;
+                            clickPos = [params.event.offsetX, params.event.offsetY];
+                            setTimeout(() => {
+                                if (!myChart || myChart.isDisposed()) return;
+                                createLevel1BubblesSequentially(clickPos, primaryData, clickedDialect);
+                            }, 300);
+                        } else {
+                            console.log(`No primary bubble data found for region/dialect ${clickedDialect}`);
+                        }
+                    }
+                });
+                myChart.getZr().on('click', function (event) {
+                    if (!myChart || myChart.isDisposed()) return;
+                    if (!event.target) {
+                        console.log("Clicked on background.");
+                        clearBubbles();
+                        // TJL添加功能
+                        hideNetwork();   // 隐藏网络图，恢复地图
+                        // TJL添加功能
+                        sessionStorage.removeItem('dashboard_selected_dialect');
+                    }
+                });
+                const btnPop = document.getElementById('viewPopulation');
+                const btnDialect = document.getElementById('viewDialectArea');
+                if (btnPop) btnPop.addEventListener('click', () => { if (currentView !== 'population') updateChartView('population'); });
+                else console.error("Button with id 'viewPopulation' not found.");
+                if (btnDialect) btnDialect.addEventListener('click', () => { if (currentView !== 'dialectArea') updateChartView('dialectArea'); });
+                else console.error("Button with id 'viewDialectArea' not found.");
+            })
+            .catch(error => {
+                console.error('Error loading data or initializing chart:', error);
+                const errorMsg = `<div style="color: red; padding: 20px; font-family: sans-serif;"><h2>错误：无法加载所需数据或初始化图表</h2><p>请检查 poly.json 和 pop_time.json 文件是否有效且可访问。</p><p>同时检查浏览器控制台是否有其他网络或脚本错误。</p><p>错误详情: ${error.message || error}</p></div>`;
+                if (chartDom) chartDom.innerHTML = errorMsg;
+                else document.body.innerHTML = `<div style="color: red; padding: 20px; font-family: sans-serif;"><h2>致命错误：无法找到图表容器 'main' 并且数据加载失败</h2><p>错误详情: ${error.message || error}</p></div>`;
+            });
+
+            window.addEventListener('resize', function () {
+                if (myChart && !myChart.isDisposed()) { myChart.resize(); clearBubbles(); }
+            });
+            window.addEventListener('unload', function() {
+                if (myChart && !myChart.isDisposed()) { myChart.dispose(); }
+            });
+        });
+    </script>
+</body>
+</html>

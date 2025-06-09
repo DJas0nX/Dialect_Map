@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中国方言声调可视化</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+        .graph-title {
+            font-size: 30px;
+            color: #333;
+            font-family: 'PingFang SC', sans-serif;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            border-radius: 10px;
+            padding: 20px;
+        }
+        
+        /* --- 新增样式：用于包裹图表和声调图例，实现左右布局 --- */
+        .chart-and-tone-legend-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 40px; /* 图表与声调图例之间的间距 */
+        }
+        
+        .chart-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 600px;
+        }
+        .controls {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .arc {
+            fill: none;
+            stroke: #ddd;
+            stroke-width: 4;
+        }
+        .point {
+            fill: #333;
+            stroke: white;
+            stroke-width: 1;
+        }
+        .chord {
+            fill: none;
+            stroke-width: 3.5;
+            opacity: 0.8;
+        }
+        .chord:hover {
+            opacity: 1;
+            stroke-width: 5;
+        }
+        .chord-outline {
+            fill: none;
+            stroke: #333;
+            stroke-width: 4.5;
+            opacity: 0.3;
+        }
+        .legend {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .legend-color {
+            width: 30px;
+            height: 5px;
+            border-radius: 2px;
+
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .info {
+            text-align: center;
+            color: #666;
+            margin-bottom: 20px;
+        }
+        .tooltip-text {
+            pointer-events: none;
+        }
+        .sector-label-background {
+            stroke: white;
+            stroke-width: 0.5px;
+        }
+        .sector-name-text {
+            font-size: 20px; 
+            font-weight: bold;
+            fill: white;
+        }
+        .text-guide-path { 
+            fill: none; stroke: red; stroke-dasharray: 2,2; 
+        }
+
+        /* --- 修改 .tone-legend 样式 --- */
+        .tone-legend {
+            position:absolute;
+            right: 10px;
+            flex-direction: column;   /* 关键：设置为垂直排列 */
+            align-items: flex-start; /* 项目左对齐 */
+            gap: 15px;               /* 设置垂直间距 */
+            /* 移除原有的水平布局样式 */
+            /* justify-content, flex-wrap, border-top, padding-top, margin-top 等被 flex 容器管理或不再需要 */
+        }
+        .tone-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 25px;
+            font-weight: bold;
+            cursor: pointer;
+            padding: 5px 10px;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        .tone-legend-item:hover {
+            background-color: #ddd;
+        }
+        .tone-legend-item.inactive {
+            opacity: 0.3;
+        }
+        .tone-legend-color {
+            width: 40px;
+            height: 6px;
+            border-radius: 2px;
+        }
+
+        /* --- dialect-legend 样式保持不变 --- */
+        .dialect-legend {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+            border-top: 1px solid #ccc;
+            padding-top: 20px;
+        }
+        .dialect-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 3px 8px;
+            border-radius: 3px;
+            transition: background-color 0.3s;
+        }
+        .dialect-legend-item:hover {
+            background-color: #ddd;
+        }
+        .dialect-legend-item.inactive {
+            opacity: 0.3;
+        }
+        .dialect-legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 3px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+        }
+        .info-panels {
+            position: fixed;
+            bottom: 20px;
+            right: 40px;
+            display: flex;
+            flex-direction: row;
+            gap: 10px;
+            z-index: 1000;
+        }
+
+        .info-panel {
+            position: relative;
+            background: white;
+            color: rgba(0, 0, 0, 0.9);
+            padding: 8px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            transition: all 0.3s ease;
+        }
+
+        .info-panel:hover {
+            background: rgba(0, 0, 0, 0.2);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .info-tooltip {
+            position: absolute;
+            bottom: 100%;
+            right: 0;
+            margin-bottom: 10px;
+            background: white;
+            color: rgba(0, 0, 0, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            font-size: 22px;
+            line-height: 1.5;
+            max-width: 520px;
+            width: max-content;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(10px);
+            transition: all 0.3s ease;
+            z-index: 1001;
+        }
+
+        .info-panel:hover .info-tooltip {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .info-tooltip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            right: 20px;
+            border: 8px solid transparent;
+            border-top-color: white;
+        }
+
+        .tone-image {
+            width: 500px;
+            height: auto;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+
+        .tooltip-text-content {
+            font-weight: normal;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">     
+        <h2 class="graph-title">十里不同音-方言声调“星座图”</h2>   
+        <!-- --- HTML 结构调整：将图表和声调图例包裹在一个新容器中 --- -->
+        <div class="chart-and-tone-legend-container">
+            <div class="chart-container">
+                <svg id="chart"></svg>
+                <div class="info-panels">
+                    <div class="info-panel">
+                        关于五度标记法
+                        <div class="info-tooltip">
+                            <div class="tooltip-text-content">
+                                <strong>五度标记法</strong>（five level tone mark），即五度制调值标记法，是赵元任1920年代发明的一种记录语言调值的方法。其把相对音高高度用数字表示，各种汉语语言的记录，以1代表最低，以2代表次低，以3代表中，以4代表次高，以5代表最高。
+                                <br><br>
+                                现代方言的调类均可分析为分化自中古汉语的四声，不过不同方言间的同源调类的调值往往差异很大。例如，官话中，阳上和阳去合流，后来阴去也与它们合流，这样一来就只剩下6个声调。后来入声的韵尾消失，入声便合流到其他调类中，只剩下4个声调。
+                                <br>
+                                <img src="tone.png" alt="五度标记法示意图" class="tone-image" onerror="this.style.display='none'">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="info-panel">
+                        关于数据采样
+                        <div class="info-tooltip">
+                            <div class="tooltip-text-content">
+                                该视图中<strong>中原官话</strong>以西安话为例，<strong>西南官话</strong>以成都话为例，<strong>江淮官话</strong>以南京话为例，<strong>华北官话</strong>以北京话为例，<strong>吴语</strong>以上海话为例，<strong>湘语</strong>以长沙话为例，<strong>赣语</strong>以南昌话为例，<strong>客家话</strong>以梅县话为例，<strong>闽语</strong>以温州话为例，<strong>粤语</strong>以广州话为例。
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 声调图例被移动到这里，成为新容器的第二个子元素 -->
+            <div class="tone-legend">
+                <div class="tone-legend-item" data-tone="阴平">
+                    <div class="tone-legend-color" style="background-color: rgb(224,128,128);"></div>
+                    <span>阴平</span>
+                </div>
+                <div class="tone-legend-item" data-tone="阳平">
+                    <div class="tone-legend-color" style="background-color: rgb(59,160,233);"></div>
+                    <span>阳平</span>
+                </div>
+                <div class="tone-legend-item" data-tone="上">
+                    <div class="tone-legend-color" style="background-color: rgb(253,183,100);"></div>
+                    <span>上声</span>
+                </div>
+                <div class="tone-legend-item" data-tone="去">
+                    <div class="tone-legend-color" style="background-color: rgb(176,245,106);"></div>
+                    <span>去声</span>
+                </div>
+                <div class="tone-legend-item" data-tone="入">
+                    <div class="tone-legend-color" style="background-color: rgb(152,238,243);"></div>
+                    <span>入声</span>
+                </div>
+            </div>
+        </div>
+        <!-- --- 结束HTML结构调整 --- -->
+
+        
+        <!-- 方言图例保持在原位，不受影响 -->
+        <div class="dialect-legend" id="dialectLegend"></div>
+        
+    </div>
+
+    <script>
+        // JavaScript 部分无需任何修改，保持原样
+        const config = {
+            width: 720,
+            height: 720,
+            centerRadius: 40,
+            maxRadius: 280, // 调整了 maxRadius 以适应新的间距逻辑
+            sectors: 10,
+            layers: 5,
+            pointsPerLayer: 3,
+            colors: ['#F7C967', '#8DD1E1', '#A4E08D', '#FFEAA7', '#E2B3EE', '#F0A8A8', '#E085BC', '#AAC4C4', '#A899E5', '#B6D2FB', '#F0E68C'],
+            labelBandHeight: 50, // 标签带的高度
+            spacingRadius: 30,  // 数据显示区域与方言名称之间的间距
+            toneColors: {
+                '阴平': 'rgb(224,128,128)',
+                '阳平': 'rgb(59,160,233)',
+                '上': 'rgb(253,183,100)', 
+                '去': 'rgb(176,245,106)',
+                '入': 'rgb(152,238,243)'
+            }
+        };
+
+        let animationEnabled = true;
+        let svg, g;
+        let activeTones = new Set(['阴平','阳平', '上', '去', '入']);
+        let activeDialects = new Set();
+
+        // 方言数据
+        const dialectData = {
+            '中原官话': { '阴平': [[3, 1, 1, 3]],'阳平': [[2, 1, 4, 3]], '上': [[4, 1, 2, 3]], '去': [[5, 1, 5, 3]], '入': [] },
+            '西南官话': { '阴平': [[5, 1, 5, 3]],'阳平': [[2, 1, 1, 3]], '上': [[4, 1, 2, 3]], '去': [[2, 1, 1, 2, 3, 3]], '入': [] },
+            '江淮官话': { '阴平': [[3, 1, 1, 3]],'阳平': [[1, 1, 3, 3]], '上': [[2, 1, 1, 2, 2, 3]], '去': [[4, 1, 4, 3]], '入': [[5, 1, 5, 2]] },
+            '华北官话': { '阴平': [[5, 1, 5, 3]],'阳平': [[3, 1, 5, 3]], '上': [[2, 1, 1, 2, 4, 3]], '去': [[5, 1, 1, 3]], '入': [] },
+            '吴语': { '阴平': [[4, 1, 4, 3]],'阳平': [[2, 1, 4, 3]], '上': [[5, 1, 2, 3]], '去': [[4, 1, 1, 2, 2, 3], [3, 1, 1, 3]], '入': [[4, 1, 4, 2], [2, 1, 3, 3]] },
+            '湘语': { '阴平': [[3, 1, 3, 3]],'阳平': [[1, 1, 3, 3]], '上': [[4, 1, 1, 3]], '去': [[5, 1, 5, 3], [2, 1, 1, 3]], '入': [[2, 1, 4, 3]] },
+            '赣语': { '阴平': [[4, 1, 2, 3]],'阳平': [[2, 1, 4, 3]], '上': [[2, 1, 1, 2, 3, 3]], '去': [[5, 1, 5, 3], [2, 1, 1, 3]], '入': [[5, 1, 5, 2], [2, 1, 1, 3]] },
+            '客家话': { '阴平': [[4, 1, 4, 3]],'阳平': [[1, 1, 1, 3]], '上': [[3, 1, 1, 3]], '去': [[5, 1, 2, 3]], '入': [[2, 1, 1, 3], [4, 1, 4, 2]] },
+            '闽语': { '阴平': [[5, 1, 5, 3]],'阳平': [[5, 1, 3, 3]], '上': [[3, 1, 3, 3]], '去': [[2, 1, 1, 2, 3, 3], [2, 1, 4, 2, 2, 3]], '入': [[2, 1, 4, 3], [5, 1, 5, 2]] },
+            '粤语': { '阴平': [[5, 1, 5, 3]],'阳平': [[2, 1, 1, 3]], '上': [[3, 1, 5, 3], [1, 1, 3, 3]], '去': [[3, 1, 3, 3], [2, 1, 2, 3]], '入': [[5, 1, 5, 2], [3, 1, 3, 2], [2, 1, 2, 2]] }
+        };
+
+        // 转换数据格式
+        let sampleData = [];
+        const dialectNames = Object.keys(dialectData);
+        
+        dialectNames.forEach((dialectName, sectorIndex) => {
+            const connections = [];
+            const tones = dialectData[dialectName];
+            
+            Object.keys(tones).forEach(toneName => {
+                tones[toneName].forEach(connection => {
+                    connections.push({ data: connection, tone: toneName });
+                });
+            });
+            
+            sampleData.push({ sector: sectorIndex, name: dialectName, connections: connections });
+        });
+
+        dialectNames.forEach(name => activeDialects.add(name));
+
+        function init() {
+            svg = d3.select('#chart')
+                .attr('width', config.width)
+                .attr('height', config.height);
+
+            g = svg.append('g')
+                .attr('transform', `translate(${config.width/2}, ${config.height/2})`);
+
+            initializeDialectLegend();
+            initializeToneLegend();
+            drawChart();
+        }
+
+        function initializeDialectLegend() {
+            const dialectLegend = d3.select('#dialectLegend');
+            dialectNames.forEach((dialectName, index) => {
+                const item = dialectLegend.append('div')
+                    .attr('class', 'dialect-legend-item')
+                    .attr('data-dialect', dialectName)
+                    .on('click', function() { toggleDialect(dialectName); });
+                
+                item.append('div')
+                    .attr('class', 'dialect-legend-color')
+                    .style('background-color', config.colors[index % config.colors.length]);
+                item.append('span').text(dialectName);
+            });
+        }
+
+        function initializeToneLegend() {
+            d3.selectAll('.tone-legend-item')
+                .on('click', function() {
+                    const tone = d3.select(this).attr('data-tone');
+                    toggleTone(tone);
+                });
+        }
+
+        function toggleTone(tone) {
+            if (activeTones.has(tone)) activeTones.delete(tone);
+            else activeTones.add(tone);
+            updateLegendStates();
+            updateChart();
+        }
+
+        function toggleDialect(dialectName) {
+            if (activeDialects.has(dialectName)) activeDialects.delete(dialectName);
+            else activeDialects.add(dialectName);
+            updateLegendStates();
+            updateChart();
+        }
+
+        function updateLegendStates() {
+            d3.selectAll('.tone-legend-item').classed('inactive', function() {
+                return !activeTones.has(d3.select(this).attr('data-tone'));
+            });
+            d3.selectAll('.dialect-legend-item').classed('inactive', function() {
+                return !activeDialects.has(d3.select(this).attr('data-dialect'));
+            });
+        }
+
+        function updateChart() {
+            g.selectAll('.sector-name-text, .sector-label-background')
+                .style('opacity', function(d) {
+                    return activeDialects.has(d.name) ? 1 : 0.2;
+                });
+
+            g.selectAll('.chord, .chord-outline')
+                .style('display', function(d) {
+                    return activeDialects.has(d.dialectName) && activeTones.has(d.tone) ? 'block' : 'none';
+                });
+        }
+
+        function drawChart() {
+            g.selectAll('*').remove();
+            
+            const dataOuterRadius = config.maxRadius;
+            const sectorAngle = (2 * Math.PI) / config.sectors;
+            
+            const layerRadii = [];
+            for (let i = 1; i <= config.layers; i++) {
+                layerRadii.push(config.centerRadius + (dataOuterRadius - config.centerRadius) * i / config.layers);
+            }
+
+            drawSectors(sectorAngle, dataOuterRadius);
+            drawSectorLabels(sectorAngle, dataOuterRadius);
+            drawArcs(layerRadii);
+            drawPoints(sectorAngle, layerRadii);
+            
+            // 先绘制连接线
+            drawConnections(sectorAngle, layerRadii);
+            // 再绘制层数标签，这样标签就会在最上层
+            drawLayerNumberLabels(sectorAngle, layerRadii);
+            
+            updateLegend();
+            updateChart();
+        }
+
+        function drawSectors(sectorAngle, dataOuterRadius) {
+            const sectors = g.selectAll('.sector')
+                .data(d3.range(config.sectors))
+                .enter()
+                .append('path')
+                .attr('class', 'sector')
+                .attr('d', (d, i) => {
+                    const startAngle = i * sectorAngle;
+                    const endAngle = (i + 1) * sectorAngle;
+                    const arc = d3.arc().innerRadius(config.centerRadius).outerRadius(dataOuterRadius).startAngle(startAngle).endAngle(endAngle);
+                    return arc();
+                })
+                .attr('fill', '#e8e8e8') 
+                .attr('stroke', 'white')
+                .attr('stroke-width', 2);
+        }
+
+        function drawSectorLabels(sectorAngle, dataOuterRadius) {
+            const labelInnerRadius = dataOuterRadius + config.spacingRadius;
+            const labelOuterRadius = labelInnerRadius + config.labelBandHeight;
+            const labelArcGenerator = d3.arc().innerRadius(labelInnerRadius).outerRadius(labelOuterRadius);
+
+            const labelData = d3.range(config.sectors).map(i => {
+                const startAngleRad = i * sectorAngle;
+                const endAngleRad = (i + 1) * sectorAngle;
+                const midAngleRad = (startAngleRad + endAngleRad) / 2;
+                const centroid = labelArcGenerator.centroid({ startAngle: startAngleRad, endAngle: endAngleRad });
+                let rotation = (midAngleRad * 180 / Math.PI);
+                if (rotation > 90 && rotation < 270) rotation -= 180;
+                
+                return {
+                    index: i, name: dialectNames[i], color: config.colors[i % config.colors.length],
+                    startAngle: startAngleRad, endAngle: endAngleRad,
+                    textX: centroid[0], textY: centroid[1], rotation: rotation
+                };
+            });
+
+            const labelGroup = g.append("g").attr("class", "sector-labels-group");
+            labelGroup.selectAll(".sector-label-background").data(labelData).enter().append("path")
+                .attr("class", "sector-label-background")
+                .attr("d", d => labelArcGenerator({ startAngle: d.startAngle, endAngle: d.endAngle }))
+                .attr("fill", d => d3.color(d.color).darker(0.7).toString());
+
+            labelGroup.selectAll(".sector-name-text").data(labelData).enter().append("text")
+                .attr("class", "sector-name-text")
+                .attr("transform", d => `translate(${d.textX}, ${d.textY}) rotate(${d.rotation})`)
+                .attr("text-anchor", "middle").attr("dominant-baseline", "middle").text(d => d.name);
+        }
+
+        function drawArcs(layerRadii) {
+            g.selectAll('.arc').data(layerRadii).enter().append('circle')
+                .attr('class', 'arc')
+                .attr('cx', 0).attr('cy', 0)
+                .attr('r', d => animationEnabled ? 0 : d)
+                .transition().duration(animationEnabled ? 1500 : 0).delay((d, i) => animationEnabled ? i * 200 : 0)
+                .attr('r', d => d);
+        }
+
+        function drawPoints(sectorAngle, layerRadii) {
+            const pointsData = []; 
+            for (let sector = 0; sector < config.sectors; sector++) {
+                for (let layer = 0; layer < config.layers; layer++) {
+                    for (let pointPosIndex = 0; pointPosIndex < config.pointsPerLayer; pointPosIndex++) {
+                        let angle;
+                        if (pointPosIndex === 0) angle = sector * sectorAngle - Math.PI/2;
+                        else if (pointPosIndex === 1) angle = (sector + 0.5) * sectorAngle - Math.PI/2;
+                        else angle = (sector + 1) * sectorAngle - Math.PI/2;
+                        
+                        const radius = layerRadii[layer];
+                        pointsData.push({
+                            sector, layer: layer + 1, position: pointPosIndex,
+                            x: Math.cos(angle) * radius, y: Math.sin(angle) * radius,
+                            angle, radius
+                        });
+                    }
+                }
+            }
+            g.selectAll('.point').data(pointsData).enter().append('circle')
+                .attr('class', 'point')
+                .attr('cx', d => d.x).attr('cy', d => d.y)
+                .attr('r', animationEnabled ? 0 : 3)
+                .transition().duration(animationEnabled ? 1000 : 0).delay(animationEnabled ? 1500 : 0)
+                .attr('r', 4);
+        }
+
+        function drawConnections(sectorAngle, layerRadii) {
+            const connections = [];
+            sampleData.forEach((sectorData, currentSectorIndex) => {
+                sectorData.connections.forEach((connectionObj, connIndex) => {
+                    const connection = connectionObj.data;
+                    const tone = connectionObj.tone;
+                    const connectionPoints = []; 
+                    
+                    for (let i = 0; i < connection.length; i += 2) {
+                        if (i + 1 < connection.length) {
+                            const layer = connection[i]; 
+                            const positionInSectorData = connection[i + 1] - 1;
+                            
+                            let angle;
+                            if (positionInSectorData === 0) angle = currentSectorIndex * sectorAngle - Math.PI/2;
+                            else if (positionInSectorData === 1) angle = (currentSectorIndex + 0.5) * sectorAngle - Math.PI/2;
+                            else angle = (currentSectorIndex + 1) * sectorAngle - Math.PI/2;
+                            
+                            const radius = layerRadii[layer - 1];
+                            if (radius === undefined) { 
+                                console.warn(`Invalid layer ${layer} for sector ${currentSectorIndex}, connection ${connIndex}. Max layer is ${config.layers}. Point skipped.`);
+                                continue;
+                            }
+                            connectionPoints.push({ x: Math.cos(angle) * radius, y: Math.sin(angle) * radius, layer, position: positionInSectorData + 1, sector: currentSectorIndex });
+                        }
+                    }
+                    
+                    if (connectionPoints.length >= 2) {
+                        connections.push({
+                            points: connectionPoints, color: config.toneColors[tone], tone: tone,
+                            dialectName: sectorData.name, id: `s${currentSectorIndex}_c${connIndex}`
+                        });
+                    }
+                });
+            });
+
+            const lineGenerator = d3.line().x(d => d.x).y(d => d.y).curve(d3.curveCatmullRom.alpha(0.5));
+            const quadraticGenerator = d => {
+                const p1 = d.points[0], p2 = d.points[1];
+                const midX = (p1.x + p2.x) / 2, midY = (p1.y + p2.y) / 2;
+                const controlX = midX * 1.1, controlY = midY * 1.1;
+                return `M ${p1.x} ${p1.y} Q ${controlX} ${controlY} ${p2.x} ${p2.y}`;
+            };
+            const pathGenerator = d => d.points.length === 2 ? quadraticGenerator(d) : lineGenerator(d.points);
+
+            const chordGroup = g.append("g").attr("class", "chords-group");
+
+            // 绘制轮廓线
+            chordGroup.selectAll('.chord-outline').data(connections).enter().append('path')
+                .attr('class', 'chord-outline').attr('d', pathGenerator)
+                .style('opacity', 0).transition().duration(1500).delay(2500).style('opacity', 0.3);
+
+            // 错误1 修正：事件监听器必须绑定在选择集上，而不是过渡(transition)对象上
+            // 1. 创建选择集并设置静态属性
+            const chords = chordGroup.selectAll('.chord')
+                .data(connections)
+                .enter()
+                .append('path')
+                .attr('class', 'chord')
+                .attr('d', pathGenerator)
+                .attr('stroke', d => d.color)
+                .style('opacity', 0); // 初始透明度为0，准备动画
+
+            // 2. 在选择集上绑定事件
+            chords.on('mouseover', function(event, d_chord) {
+                d3.select(this).style('stroke-width', '5px');
+                const [svgX, svgY] = d3.pointer(event, svg.node());
+                g.append('text').attr('class', 'tooltip-text')
+                    .attr('x', svgX - config.width/2).attr('y', svgY - config.height/2 - 15)
+                    .attr('text-anchor', 'middle').attr('fill', 'black')
+                    .attr('font-size', '12px').attr('font-weight', 'bold')
+                    .text(`${d_chord.dialectName} - ${d_chord.tone}声: ${d_chord.points.map(p => `${p.layer}`).join('-')}`);
+            }).on('mouseout', function() {
+                d3.select(this).style('stroke-width', '3.5px');
+                g.selectAll('.tooltip-text').remove();
+            });
+
+            // 3. 对选择集应用过渡动画
+            chords.transition()
+                .duration(1500)
+                .delay(2500)
+                .style('opacity', 0.8);
+        }
+        
+
+        function drawLayerNumberLabels(sectorAngle, layerRadii) {
+            const labelsData = [];
+            const targetSector = 2; 
+            const targetPointPosIndex = 1; // 中间的点
+            const angle = (targetSector + 0.5) * sectorAngle - Math.PI / 2;
+
+            for (let i = config.layers - 1; i >= 0; i--) {
+                const radius = layerRadii[i];
+                labelsData.push({
+                    x: Math.cos(angle) * radius,
+                    y: Math.sin(angle) * radius,
+                    label: i+1
+                });
+            }
+
+            const labelGroup = g.append("g").attr("class", "layer-number-labels");
+
+            const labels = labelGroup.selectAll(".layer-number-label")
+                .data(labelsData)
+                .enter()
+                .append("g")
+                .attr("class", "layer-number-label");
+                
+            labels.append("circle")
+                .attr("cx", d => d.x)
+                .attr("cy", d => d.y)
+                .attr("r", 10)
+                .attr("fill", "white")
+                .attr("stroke", "#999")
+                .attr("stroke-width", 1.5);
+
+            labels.append("text")
+                .attr("x", d => d.x)
+                .attr("y", d => d.y)
+                .attr("text-anchor", "middle")
+                .attr("dominant-baseline", "central")
+                .attr("font-family", "Arial, sans-serif")
+                .attr("font-size", "12px")
+                .attr("font-weight", "bold")
+                .attr("fill", "#333")
+                .text(d => d.label);
+
+            // 让标签在连接线动画结束后出现
+            labels.style('opacity', 0) 
+                .transition()
+                .delay(3000) // 延迟出现，避开其他动画
+                .duration(1000)
+                .style('opacity', 1);
+        }
+
+        function updateLegend() {
+            // 此函数保持不变
+        }
+        
+        init();
+        document.addEventListener("DOMContentLoaded", function () {
+        
+        /**
+         * 根据方言名称高亮D3节点
+         * @param {string | null} dialectName - 要高亮的方言名称, null 表示清除高亮
+         */
+        function highlightNode(dialectName) {
+            // 若 dialectName 为 null，则显示所有线，否则只显示对应方言的线
+            d3.selectAll('.chord, .chord-outline')
+            .style('display', d => {
+                if (!dialectName) return 'block';
+                return d.dialectName === dialectName ? 'block' : 'none';
+            });
+        }
+
+        // 监听其他页面对 sessionStorage 的修改
+        window.addEventListener('storage', function(e) {
+            if (e.key === 'dashboard_selected_dialect') {
+                const newDialect = e.newValue;
+                console.log(`Storage changed: Selected dialect is now "${newDialect}"`);
+                highlightNode(newDialect);
+            }
+        });
+
+        // 页面首次加载时，检查是否已有选中的方言
+        const initialDialect = sessionStorage.getItem('dashboard_selected_dialect');
+        if (initialDialect) {
+            console.log(`Initial load: Found selected dialect "${initialDialect}"`);
+            // 这里的延时可能需要根据您的D3加载和渲染时间调整
+            setTimeout(() => highlightNode(initialDialect), 500);
+        }
+    });
+    </script>
+</body>
+</html>

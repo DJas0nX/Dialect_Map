@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>综合数据可视化仪表盘 (带动画和真实放大)</title>
+    <style>
+        /* --- 基础和全局样式 --- */
+        html, body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            
+            /* --- 修改开始 --- */
+            /* 1. 基础背景色，会显示在渐变下方 */
+            background-color: rgb(247, 233, 206);
+            /* 2. 添加顶部400px的渐变层 */
+            background-image: linear-gradient(to bottom, rgb(219, 210, 181), rgb(247, 233, 206) 800px);
+            /* 3. 确保渐变不重复平铺 */
+            background-repeat: no-repeat;
+            /* --- 修改结束 --- */
+        }
+
+        /* --- 当有视图放大时，隐藏body的滚动条，防止背景滚动 --- */
+        body.view-maximized {
+            overflow: hidden;
+        }
+
+        /* --- 新增：章节导航样式 --- */
+        .chapter-navigation {
+            position: fixed;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+        }
+
+        .chapter-nav-item {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .chapter-button {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, rgba(219, 210, 181, 0.95), rgba(247, 233, 206, 0.95));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            box-shadow: 0 4px 15px rgba(139, 115, 85, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(219, 210, 181, 0.3);
+            font-size: 18px;
+            font-weight: 600;
+            color: rgba(101, 67, 33, 0.8);
+            user-select: none;
+        }
+
+        .chapter-button:hover {
+            transform: translateX(5px) scale(1.05);
+            box-shadow: 0 6px 20px rgba(139, 115, 85, 0.3);
+            background: linear-gradient(135deg, rgba(219, 210, 181, 1), rgba(241, 220, 186, 1));
+            color: rgba(101, 67, 33, 1);
+        }
+
+        .chapter-tooltip {
+            position: absolute;
+            left: 65px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: linear-gradient(135deg, rgba(255, 248, 235, 0.98), rgba(247, 233, 206, 0.98));
+            padding: 12px 18px;
+            border-radius: 8px;
+            white-space: nowrap;
+            font-size: 14px;
+            font-weight: 500;
+            color: rgba(101, 67, 33, 0.9);
+            box-shadow: 0 8px 25px rgba(139, 115, 85, 0.25);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(219, 210, 181, 0.4);
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-50%) translateX(-10px);
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            pointer-events: none;
+            z-index: 1001;
+        }
+
+        .chapter-tooltip::before {
+            content: '';
+            position: absolute;
+            left: -8px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 0;
+            height: 0;
+            border-top: 8px solid transparent;
+            border-bottom: 8px solid transparent;
+            border-right: 8px solid rgba(247, 233, 206, 0.98);
+            filter: drop-shadow(-1px 0px 1px rgba(219, 210, 181, 0.3));
+        }
+
+        .chapter-nav-item:hover .chapter-tooltip {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(-50%) translateX(0);
+        }
+
+        /* 章节按钮活跃状态 */
+        .chapter-button.active {
+            background: linear-gradient(135deg, rgba(203, 159, 83, 0.9), rgba(219, 210, 181, 0.9));
+            color: rgba(101, 67, 33, 1);
+            transform: translateX(8px);
+            box-shadow: 0 6px 20px rgba(139, 115, 85, 0.4);
+        }
+
+        /* --- 新增：Banner样式 --- */
+        .banner-container {
+            width: 100%;
+            height: auto;
+            overflow: hidden; /* 防止图片溢出容器 */
+        }
+
+        .banner-container img {
+            width: 100%;
+            height: auto;
+            object-fit: fill; /* 保证图片填满容器而不变形，多余部分会被裁剪 */
+            display: block; /* 移除图片底部的默认空隙 */
+        }
+        /* --- 新增结束 --- */
+
+        /* --- 主容器 Flexbox 布局 --- */
+        .dashboard-container {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            padding: 15px;
+            box-sizing: border-box;
+            gap: 15px;
+        }
+
+        /* --- 行样式 --- */
+        .row {
+            width: 100%;
+            display: flex;
+            gap: 15px;
+        }
+
+        /* --- 自定义每一行的高度 --- */
+        #row-1 {
+            margin-top: -800px;
+            height: 800px;
+        }
+        #row-2 {
+            height: 820px;
+        }
+        #row-3 {
+            height: 1060px;
+        }
+
+        /* --- 图表容器样式 --- */
+        .chart-container {
+            flex: 1;
+            background-color: rgb(247, 233, 206);
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.09);
+            overflow: hidden;
+            position: relative;
+            /* 关键动画过渡属性 */
+            transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+            transform-origin: center center;
+        }
+     
+        /* 
+         * --- Iframe 缩放样式 --- 
+         */
+        .chart-container iframe {
+            --zoom-factor: var(--zoom, 1);
+            width: calc(100% / var(--zoom-factor));
+            height: calc(100% / var(--zoom-factor));
+            transform: scale(var(--zoom-factor));
+            transform-origin: 0 0;
+            border: none;
+            /* 为iframe内容也添加过渡动画 */
+            transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+
+        /* --- 视图放大/缩小功能样式 --- */
+
+        /* 1. 图标容器样式 */
+        .view-controls {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            z-index: 10;
+            cursor: pointer;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 50%;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+            backdrop-filter: blur(10px);
+        }
+
+        .view-controls:hover {
+            background-color: rgba(240, 240, 240, 0.95);
+            transform: scale(1.1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        /* 2. 图标SVG样式 */
+        .view-controls svg {
+            width: 20px;
+            height: 20px;
+            transition: fill 0.2s ease;
+        }
+
+        .view-controls:hover svg {
+            fill: #007acc;
+        }
+
+        /* 3. 默认状态下，隐藏"缩小"图标 */
+        .icon-minimize {
+            display: none;
+            width: 20px;
+        }
+        .icon-maximize {
+            width: 20px;
+        }
+        /* 4. 定义放大后的样式 */
+        .chart-container.maximized {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            border-radius: 0;
+            z-index: 9999;
+            padding: 20px;
+            box-sizing: border-box;
+            box-shadow: none;
+            /* 关键：确保iframe在放大状态下真正放大 */
+            --zoom: 1; /* 放大20% */
+        }
+
+        /* 放大状态下的iframe额外调整 */
+        .chart-container.maximized iframe {
+            width: 100%;
+            height: 100%;
+            transform: scale(1);
+            transform-origin: center center;
+        }
+
+        /* 5. 当容器被放大后的图标切换 */
+        .chart-container.maximized .icon-maximize {
+            width: 20px;
+            display: none;
+        }
+        .chart-container.maximized .icon-minimize {
+            display: block;
+            
+        }
+
+        /* 放大状态下的控制按钮样式调整 */
+        .chart-container.maximized .view-controls {
+            top: 30px;
+            right: 30px;
+            width: 44px;
+            height: 44px;
+        }
+
+        .chart-container.maximized .view-controls svg {
+            fill: white;
+            width: 24px;
+            height: 24px;
+        }
+
+        .chart-container.maximized .view-controls:hover {
+            transform: scale(1.1);
+        }
+
+        /* --- 添加一个遮罩层，提供更好的视觉体验 --- */
+        .chart-container.maximized::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: -1;
+            animation: fadeIn 0.4s ease;
+        }
+
+        /* 淡入动画 */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+
+        /* --- 响应式设计优化 --- */
+        @media (max-width: 768px) {
+            .dashboard-container {
+                padding: 10px;
+                gap: 10px;
+            }
+            
+            .row {
+                gap: 10px;
+            }
+            
+            #row-1, #row-2, #row-3 {
+                height: auto;
+                min-height: 400px;
+            }
+            
+            .chart-container.maximized {
+                padding: 10px;
+            }
+            
+            .view-controls {
+                width: 32px;
+                height: 32px;
+                top: 10px;
+                right: 10px;
+            }
+            
+            .view-controls svg {
+                width: 18px;
+                height: 18px;
+            }
+
+            /* 移动端章节导航调整 */
+            .chapter-navigation {
+                left: 10px;
+                gap: 10px;
+            }
+
+            .chapter-button {
+                width: 40px;
+                height: 40px;
+                font-size: 14px;
+            }
+
+            .chapter-tooltip {
+                left: 55px;
+                font-size: 12px;
+                padding: 8px 12px;
+            }
+        }
+
+        /* --- 加载状态样式 --- */
+        .chart-container.loading {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: loading 1.5s infinite;
+        }
+
+        /* 隐藏章节导航当视图被最大化时 */
+        body.view-maximized .chapter-navigation {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        
+    </style>
+</head>
+<body>
+
+    <!-- 新增：章节导航 -->
+    <div class="chapter-navigation">
+        <div class="chapter-nav-item">
+            <div class="chapter-button" data-target="row-1">壹</div>
+            <div class="chapter-tooltip">方言地图与关系网络 - 探索汉语方言的地域分布与内在联系</div>
+        </div>
+        <div class="chapter-nav-item">
+            <div class="chapter-button" data-target="row-2">贰</div>
+            <div class="chapter-tooltip">综合对比与声调分析 - 深度解析方言特征与音调差异</div>
+        </div>
+        <div class="chapter-nav-item">
+            <div class="chapter-button" data-target="row-3">叁</div>
+            <div class="chapter-tooltip">方言特色词汇 - 领略各地方言的独特语言魅力</div>
+        </div>
+    </div>
+
+    <!-- 新增：Banner 区域 -->
+    <div class="banner-container">
+        <img src="images/banner.png" alt="网页横幅">
+    </div>
+
+    <div class="dashboard-container">
+
+        <!-- 第一行: main.html -->
+        <div class="row" id="row-1">
+            <div class="chart-container" style="background-color: transparent;box-shadow: 0 2px 8px rgba(0, 0, 0, 0);">
+                <div class="view-controls" title="放大视图">
+                    <img src="expand.png"  class="icon-maximize">
+                    <img src="collapse.png"  class="icon-minimize">
+                </div>
+                <iframe src="./main.html" title="方言地图与关系网络"></iframe>
+            </div>
+        </div>
+
+        <!-- 第二行: radar.html 和 stellar.html -->
+        <div class="row" id="row-2">
+            <div class="chart-container" style="--zoom: 0.8;">
+                <div class="view-controls" title="放大视图">
+                    <img src="expand.png"  class="icon-maximize">
+                    <img src="collapse.png"  class="icon-minimize">
+                </div>
+                <iframe src="./radar.html" title="汉语方言综合对比雷达图"></iframe>
+            </div>
+            <div class="chart-container" style="--zoom: 0.8;">
+                <div class="view-controls" title="放大视图">
+                    <img src="expand.png"  class="icon-maximize">
+                    <img src="collapse.png"  class="icon-minimize">
+                </div>
+                <iframe src="./stellar.html" title="中国方言声调可视化"></iframe>
+            </div>
+        </div>
+
+        <!-- 第三行: wordcloud.html -->
+        <div class="row" id="row-3">
+            <div class="chart-container" style="--zoom: 0.72;">
+                <div class="view-controls" title="放大视图">
+                    <img src="expand.png"  class="icon-maximize">
+                    <img src="collapse.png"  class="icon-minimize">
+                </div>
+                <iframe src="./wordcloud.html" title="方言特色词词云"></iframe>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // 获取页面上所有的视图控制按钮
+        const viewControls = document.querySelectorAll('.view-controls');
+
+        // 为每个按钮添加点击事件监听器
+        viewControls.forEach(control => {
+            control.addEventListener('click', (e) => {
+                // 阻止事件冒泡
+                e.stopPropagation();
+                
+                // 找到对应的图表容器
+                const chartContainer = control.closest('.chart-container');
+                const isMaximized = chartContainer.classList.contains('maximized');
+                
+                if (chartContainer) {
+                    if (isMaximized) {
+                        // 缩小操作
+                        chartContainer.classList.remove('maximized');
+                        document.body.classList.remove('view-maximized');
+                        control.setAttribute('title', '放大视图');
+                        
+                        // 添加缩小完成后的回调
+                        setTimeout(() => {
+                            chartContainer.style.transform = '';
+                        }, 400);
+                    } else {
+                        // 放大操作
+                        // 首先关闭其他可能已经放大的视图
+                        document.querySelectorAll('.chart-container.maximized').forEach(container => {
+                            container.classList.remove('maximized');
+                        });
+                        document.body.classList.remove('view-maximized');
+                        
+                        // 短暂延迟后执行放大
+                        setTimeout(() => {
+                            chartContainer.classList.add('maximized');
+                            document.body.classList.add('view-maximized');
+                            control.setAttribute('title', '缩小视图');
+                        }, 50);
+                    }
+                }
+            });
+            
+            // 添加键盘支持
+            control.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    control.click();
+                }
+            });
+            
+            // 使按钮可获得焦点
+            control.setAttribute('tabindex', '0');
+        });
+
+        // 章节导航功能
+        const chapterButtons = document.querySelectorAll('.chapter-button');
+
+        chapterButtons.forEach(button => {
+            button.addEventListener('click', (e) => {
+                // 移除所有按钮的活跃状态
+                chapterButtons.forEach(btn => btn.classList.remove('active'));
+                // 添加当前按钮的活跃状态
+                button.classList.add('active');
+                
+                const targetId = button.getAttribute('data-target');
+                const targetElement = document.getElementById(targetId);
+                
+                if (targetElement) {
+                    // 平滑滚动到目标章节
+                    targetElement.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'center'
+                    });
+                }
+            });
+        });
+
+        // 滚动监听，自动更新活跃章节
+        function updateActiveChapter() {
+            const sections = ['row-1', 'row-2', 'row-3'];
+            const scrollPosition = window.scrollY + window.innerHeight / 2;
+            
+            let activeSection = null;
+            sections.forEach(sectionId => {
+                const element = document.getElementById(sectionId);
+                if (element) {
+                    const rect = element.getBoundingClientRect();
+                    const elementTop = rect.top + window.scrollY;
+                    const elementBottom = elementTop + rect.height;
+                    
+                    if (scrollPosition >= elementTop && scrollPosition <= elementBottom) {
+                        activeSection = sectionId;
+                    }
+                }
+            });
+            
+            // 更新按钮状态
+            chapterButtons.forEach(button => {
+                const target = button.getAttribute('data-target');
+                if (target === activeSection) {
+                    button.classList.add('active');
+                } else {
+                    button.classList.remove('active');
+                }
+            });
+        }
+
+        // 添加滚动监听器
+        let scrollTimeout;
+        window.addEventListener('scroll', () => {
+            clearTimeout(scrollTimeout);
+            scrollTimeout = setTimeout(updateActiveChapter, 100);
+        });
+
+        // 页面加载时初始化活跃章节
+        document.addEventListener('DOMContentLoaded', () => {
+            updateActiveChapter();
+        });
+
+        // 添加ESC键快速退出放大视图的功能
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                const maximizedContainer = document.querySelector('.chart-container.maximized');
+                if (maximizedContainer) {
+                    maximizedContainer.classList.remove('maximized');
+                    document.body.classList.remove('view-maximized');
+                    const control = maximizedContainer.querySelector('.view-controls');
+                    if (control) {
+                        control.setAttribute('title', '放大视图');
+                    }
+                }
+            }
+        });
+
+        // 添加点击外部区域关闭放大视图的功能
+        document.addEventListener('click', (e) => {
+            const maximizedContainer = document.querySelector('.chart-container.maximized');
+            if (maximizedContainer && !maximizedContainer.contains(e.target)) {
+                maximizedContainer.classList.remove('maximized');
+                document.body.classList.remove('view-maximized');
+                const control = maximizedContainer.querySelector('.view-controls');
+                if (control) {
+                    control.setAttribute('title', '放大视图');
+                }
+            }
+        });
+
+        // 页面加载完成后的初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            // 为所有iframe添加加载状态
+            const iframes = document.querySelectorAll('iframe');
+            iframes.forEach(iframe => {
+                const container = iframe.closest('.chart-container');
+                container.classList.add('loading');
+                
+                iframe.addEventListener('load', () => {
+                    container.classList.remove('loading');
+                });
+                
+                // 超时处理
+                setTimeout(() => {
+                    container.classList.remove('loading');
+                }, 5000);
+            });
+        });
+    </script>
+
+</body>
+</html>

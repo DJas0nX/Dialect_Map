@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="./styles.css">
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 10px;
+      font-family: sans-serif;
+    }
+
+    #main {
+      width: 1200px;
+      height: 850px;
+    }
+    .graph-title {
+      font-size: 30px;
+      color: #333;
+      font-family: 'PingFang SC', sans-serif;
+      margin-top: 0;
+      margin-bottom: -30px;
+    }
+        .info-panels {
+            position: fixed;
+            bottom: 20px;
+            right: 40px;
+            display: flex;
+            flex-direction: row;
+            gap: 10px;
+            z-index: 1000;
+        }
+
+        .info-panel {
+            position: relative;
+            background: white;
+            color: rgba(0, 0, 0, 0.9);
+            padding: 8px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            transition: all 0.3s ease;
+        }
+
+        .info-panel:hover {
+            background: rgba(0, 0, 0, 0.2);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .info-tooltip {
+            position: absolute;
+            bottom: 100%;
+            right: 0;
+            margin-bottom: 10px;
+            background: white;
+            color: rgba(0, 0, 0, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            font-size: 18px;
+            line-height: 1.5;
+            max-width: 550px;
+            width: max-content;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(10px);
+            transition: all 0.3s ease;
+            z-index: 1001;
+        }
+
+        .info-panel:hover .info-tooltip {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .info-tooltip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            right: 20px;
+            border: 8px solid transparent;
+            border-top-color: white;
+        }
+
+        .tone-image {
+            width: 500px;
+            height: auto;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+
+        .tooltip-text-content {
+            font-weight: normal;
+        }
+  </style>
+  <script src="echarts.min.js"></script>
+</head>
+
+<body>  
+  <h2 class="graph-title">九州语脉-汉语方言综合对比</h2>  
+    <div class="info-panels">
+        <div class="info-panel">
+            关于属性计算
+            <div class="info-tooltip">
+                <div class="tooltip-text-content">
+                  <ol>
+                      <li>
+                          <strong>声调数量</strong>
+                          <p>数据源自<cite>《中国语言地图集》(第2版)-汉语方言卷</cite>。</p>
+                      </li>
+                      <li>
+                          <strong>古音保留</strong>
+                          <p>计算公式为：<br><code>存古指数 = (保留特征数 / 中古特征总数) × 100</code>；</p>
+                          <p>中古特征总数数据过于庞杂，学界通常选取30-50项关键特征作为存古指标，这里我们选取40项。</p>
+                          <p>各方言保留特征数源自<cite>《中国语言地图集》(第2版)-汉语方言卷</cite>，比如闽语保留特征数为34，则其存古指数为34/40=85%。</p>
+                          <p>最后我们将0-20%区间置为1，20%-40%区间置为2，40%-60%区间置为3，60%-80%区间置为4，80%-100%区间置为5。</p>
+                      </li>
+                      <li>
+                          <strong>互通度</strong>
+                          <p>互通度反映方言使用者对普通话的理解能力，源自<cite>《中国语言地图集》(第2版)-汉语方言卷</cite>。</p>
+                      </li>
+                      <li>
+                          <strong>学习难度</strong>
+                          <p>学习难度源自美国外交学院（FSI）语言难度分级和<cite>《汉语方言习得研究》</cite>统计500名普话母语者学习各方言的发音错误率。</p>
+                      </li>
+                      <li>
+                          <strong>使用人数</strong>
+                          <p>数据源自<cite>《中国语言地图集》(第2版)-汉语方言卷</cite>。</p>
+                      </li>
+                  </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+  <div id="main">
+  </div>
+  <script>
+    var chartDom = document.getElementById('main');
+    var myChart = echarts.init(chartDom);
+    var option;
+
+    // 1. 定义原始数据和单位
+    const originalDialectData = {
+      '闽语':     { values: [7, 5, 0.2, 5, 7500], units: ['个', '级', '', '级', '万'] },
+      '粤语':     { values: [9, 4, 0.35, 5, 6800], units: ['个', '级', '', '级', '万'] },
+      '吴语':     { values: [7, 4, 0.4, 4, 7400], units: ['个', '级', '', '级', '万'] },
+      '客家话':     { values: [6, 3, 0.5, 3, 4220], units: ['个', '级', '', '级', '万'] },
+      '湘语':     { values: [6, 3, 0.6, 3, 3085], units: ['个', '级', '', '级', '万'] },
+      '赣语':     { values: [5, 2, 0.65, 3, 4800], units: ['个', '级', '', '级', '万'] },
+      '华北官话': { values: [4, 1, 1, 1, 8942], units: ['个', '级', '', '级', '万'] },
+      '西南官话': { values: [8, 1, 0.95, 1, 27000], units: ['个', '级', '', '级', '万'] },
+      '江淮官话': { values: [6, 2, 0.85, 2, 8605], units: ['个', '级', '', '级', '万'] },
+      '西北官话': { values: [4, 1, 0.9, 1, 1200], units: ['个', '级', '', '级', '万'] }
+    };
+
+    // 2. 定义雷达图指标 (与原始数据顺序对应)
+    const radarIndicators = [
+      { text: '声调数量' },
+      { text: '古音保留(1-5)' }, // 对应原始数据的第二列
+      { text: '互通度' },       // 对应原始数据的第三列
+      { text: '学习难度(1-5)' }, // 对应原始数据的第四列
+      { text: '使用人数' }      // 对应原始数据的第五列，单位是“万”
+    ];
+
+    // 3. 准备 series.data，包含绘图用的归一化值 和 tooltip用的原始值
+    const seriesData = [
+      {
+        value: [1, 1, 9.75, 1, 1], name: '中原官话',
+        originalData: originalDialectData['西北官话'],
+        lineStyle: { color: '#F7C967', width: 4 }, itemStyle: { color: '#F7C967' }
+      },
+      {
+        value: [9, 1, 10.38, 1, 11], name: '西南官话',
+        originalData: originalDialectData['西南官话'],
+        lineStyle: { color: '#8DD1E1', width: 4 }, itemStyle: { color: '#8DD1E1' }
+      },
+      {
+        value: [5, 3.5, 9.13, 3.5, 3.87], name: '江淮官话',
+        originalData: originalDialectData['江淮官话'],
+        lineStyle: { color: '#A4E08D', width: 4 }, itemStyle: { color: '#A4E08D' }
+      },
+      {
+        value: [1, 1, 11, 1, 4], name: '华北官话',
+        originalData: originalDialectData['华北官话'],
+        lineStyle: { color: '#FFEAA7', width: 4 }, itemStyle: { color: '#FFEAA7' }
+      },
+      {
+        value: [7, 8.5, 3.5, 8.5, 3.4], name: '吴语',
+        originalData: originalDialectData['吴语'],
+        lineStyle: { color: '#E2B3EE', width: 4 }, itemStyle: { color: '#E2B3EE' }
+      },
+      {
+        value: [5, 6, 6, 6, 1.73], name: '湘语',
+        originalData: originalDialectData['湘语'],
+        lineStyle: { color: '#F0A8A8', width: 4 }, itemStyle: { color: '#F0A8A8' }
+      },
+      {
+        value: [3, 3.5, 6.63, 6, 2.4], name: '赣语',
+        originalData: originalDialectData['赣语'],
+        lineStyle: { color: '#E085BC', width: 4 }, itemStyle: { color: '#E085BC' }
+      },
+
+      {
+        value: [5, 6, 4.75, 6, 2.17], name: '客家话',
+        originalData: originalDialectData['客家话'],
+        lineStyle: { color: '#AAC4C4', width: 4 }, itemStyle: { color: '#AAC4C4' }
+      },
+      {
+        value: [7, 11, 1, 11, 3.44], // 归一化值 (用于绘图)
+        name: '闽语',
+        originalData: originalDialectData['闽语'], // 存储原始数据和单位
+        lineStyle: { color: '#A899E5', width: 4 }, itemStyle: { color: '#A899E5' }
+      },
+      
+      {
+        value: [11, 8.5, 2.88, 11, 3.17], name: '粤语',
+        originalData: originalDialectData['粤语'],
+        lineStyle: { color: '#B6D2FB', width: 4 }, itemStyle: { color: '#B6D2FB' }
+      },
+
+
+
+    ];
+
+
+    option = {
+      legend: {
+        bottom: 20,
+        textStyle: { 
+          fontSize: 22, 
+          color: '#333', 
+          fontFamily: 'PINGFANG REGULAR, sans-serif' 
+        },
+        itemStyle: {
+          shadowColor: 'rgba(0,0,0,0.25)',
+          shadowBlur: 8,
+          shadowOffsetX: 2,
+          shadowOffsetY: 2
+        }
+      },
+      tooltip: {
+        trigger: 'item',
+        formatter: function (params) {
+          const seriesName = params.name;
+          const currentOriginalData = params.data.originalData;
+
+          if (!currentOriginalData) {
+        return seriesName;
+          }
+
+          let tooltipContent = '<div style="font-size:18px;line-height:1.6;">' + params.marker + '<b>' + seriesName + '</b><br/>';
+          const indicators = option.radar[0].indicator;
+
+          currentOriginalData.values.forEach((val, index) => {
+        if (indicators[index] && indicators[index].text) {
+          const unit = currentOriginalData.units[index] || '';
+          tooltipContent += indicators[index].text + ': ' + val + unit + '<br/>';
+        }
+          });
+          tooltipContent += '</div>';
+          return tooltipContent;
+        },
+        textStyle: {
+          fontSize: 32
+        }
+      },
+      radar: [{
+        indicator: radarIndicators, // 使用我们定义的指标
+        center: ['50%', '50%'],
+        radius: 360,
+        startAngle: 90,
+        splitNumber: 6,
+        shape: 'circle',
+        axisName: {
+          formatter: '{value}',
+          color: '#292929',
+          fontSize: 20,
+          fontFamily: 'PINGFANG LIGHT, sans-serif'
+        },
+        splitArea: {
+          areaStyle: {
+            color: ['#FAFAFA', '#EDEDED']
+          }
+        },
+        axisLine: { lineStyle: { color: 'rgba(206, 206, 206, 0.4)',width: 3} },
+        splitLine: { lineStyle: { color: 'rgba(206, 206, 206, 0.3)',width: 2} }
+      }],
+      series: [{
+        type: 'radar',
+        emphasis: { lineStyle: { width: 7 } },
+        data: seriesData // 使用包含原始数据的新 seriesData
+      }]
+    };
+
+    option && myChart.setOption(option);
+
+    window.addEventListener('resize', function () {
+      myChart.resize();
+    });
+    document.addEventListener("DOMContentLoaded", function () {
+        // 假设您的 ECharts 实例名为 myChart
+        // const myChart = echarts.init(document.getElementById('your-chart-id'));
+
+        /**
+         * 根据方言名称高亮图表项
+         * @param {string | null} dialectName - 要高亮的方言名称, null 表示清除高亮
+         */
+    function highlightItem(dialectName) {
+        // 确保 myChart 实例已存在且未被销毁
+        if (!window.myChart || myChart.isDisposed()) {
+            console.warn("Chart instance not ready for highlighting.");
+            return;
+        }
+
+        // 先取消所有高亮和淡化
+        myChart.dispatchAction({
+          type: 'downplay',
+          seriesIndex: 0
+        });
+
+        // 如果 dialectName 为 null，重置所有项为正常状态
+        if (dialectName === null) {
+            // 重置所有项为正常显示
+            myChart.setOption({
+              series: [{
+                itemStyle: { opacity: 1 },
+                lineStyle: { opacity: 1 },
+                areaStyle: { opacity: 0 },
+                data: seriesData.map(item => ({
+                  ...item,
+                  itemStyle: { ...item.itemStyle, opacity: 1 },
+                  lineStyle: { ...item.lineStyle, opacity: 1 },
+                  areaStyle: { opacity: 0 }
+                }))
+              }]
+            });
+            return;
+        }
+
+        // 只高亮指定项，其余项淡化
+        const currentSeriesData = myChart.getOption().series[0].data;
+        const dataIndex = currentSeriesData.findIndex(item => item.name === dialectName);
+
+        if (dataIndex !== -1) {
+          // 先将所有项设置为淡化（透明度低）
+          myChart.setOption({
+            series: [{
+              itemStyle: { opacity: 0.15 },
+              lineStyle: { opacity: 0.15 },
+              areaStyle: { opacity: 0.05 }
+            }]
+          });
+
+          // 高亮指定项（透明度高）
+          myChart.dispatchAction({
+            type: 'highlight',
+            seriesIndex: 0,
+            dataIndex: dataIndex
+          });
+
+          // 单独设置高亮项透明度为1
+          let newSeriesData = currentSeriesData.map((item, idx) => {
+            if (idx === dataIndex) {
+              return Object.assign({}, item, {
+                itemStyle: Object.assign({}, item.itemStyle, { opacity: 1 }),
+                lineStyle: Object.assign({}, item.lineStyle, { opacity: 1 }),
+                areaStyle: { opacity: 0.18 }
+              });
+            } else {
+              return Object.assign({}, item, {
+                itemStyle: Object.assign({}, item.itemStyle, { opacity: 0.15 }),
+                lineStyle: Object.assign({}, item.lineStyle, { opacity: 0.15 }),
+                areaStyle: { opacity: 0.05 }
+              });
+            }
+          });
+          myChart.setOption({
+            series: [{
+              data: newSeriesData
+            }]
+          });
+
+          // (可选) 聚焦到高亮项
+          myChart.dispatchAction({
+            type: 'focusNodeAdjacency',
+            seriesIndex: 0,
+            dataIndex: dataIndex
+          });
+        }
+    }
+
+        // 监听其他页面对 sessionStorage 的修改
+        window.addEventListener('storage', function(e) {
+            if (e.key === 'dashboard_selected_dialect') {
+                const newDialect = e.newValue;
+                console.log(`Storage changed: Selected dialect is now "${newDialect}"`);
+                highlightItem(newDialect);
+            }
+        });
+
+        // 页面首次加载时，检查是否已有选中的方言
+        const initialDialect = sessionStorage.getItem('dashboard_selected_dialect');
+        if (initialDialect) {
+            console.log(`Initial load: Found selected dialect "${initialDialect}"`);
+            // 等待图表渲染完成
+            setTimeout(() => highlightItem(initialDialect), 500);
+        }
+    });
+  </script>
+</body>
+
+</html>
