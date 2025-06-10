@@ -632,7 +632,7 @@
                 g.append('text').attr('class', 'tooltip-text')
                     .attr('x', svgX - config.width/2).attr('y', svgY - config.height/2 - 15)
                     .attr('text-anchor', 'middle').attr('fill', 'black')
-                    .attr('font-size', '12px').attr('font-weight', 'bold')
+                    .attr('font-size', '20px').attr('font-weight', 'bold')
                     .text(`${d_chord.dialectName} - ${d_chord.tone}声: ${d_chord.points.map(p => `${p.layer}`).join('-')}`);
             }).on('mouseout', function() {
                 d3.select(this).style('stroke-width', '3.5px');
